@@ -53,6 +53,9 @@ export default function Hero() {
 
             {/* Headline */}
             <h1 className="text-[32px] sm:text-[52px] lg:text-[58px] xl:text-[64px] leading-[1.08] sm:leading-[1.04] tracking-[-0.025em] font-semibold text-[var(--tt-fg)] mb-5 max-w-4xl mx-auto lg:mx-0">
+              <span className="block text-[13px] sm:text-[14px] font-medium tracking-[0.04em] text-[var(--tt-fg-dim)] uppercase mb-3">
+                Token Telemetry
+              </span>
               See exactly what your{" "}
               <span className="text-[var(--tt-brand)]">coding agents</span>{" "}
               cost, think, and do.

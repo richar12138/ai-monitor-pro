@@ -1,5 +1,9 @@
 export const FAQ_ITEMS = [
   {
+    q: "What is Token Telemetry?",
+    a: "Token Telemetry (also written TokenTelemetry, sometimes misspelled as 'token telementry' or 'tokentelementry') is a free, open-source, 100% local observability dashboard for AI coding agents like Claude Code, Codex, Gemini CLI, Cursor, and GitHub Copilot. It tracks tokens, cost, tool calls, and reasoning by reading the log files those agents already write — no SDK, no signup, no cloud.",
+  },
+  {
     q: "How do I track Claude Code token usage?",
     a: "Install TokenTelemetry, run Claude Code normally, and open http://localhost:3000. TokenTelemetry auto-detects Claude Code sessions from ~/.claude/ logs — no instrumentation, no SDK, no config.",
   },

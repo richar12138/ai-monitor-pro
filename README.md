@@ -1,6 +1,8 @@
-# TokenTelemetry
+# Token Telemetry (TokenTelemetry)
 
 > **Local token + cost monitoring dashboard for AI coding agents — Claude Code, Gemini CLI, Codex, Cursor, GitHub Copilot, OpenCode, and more.**
+
+**Token Telemetry** (one word: **TokenTelemetry**) — free, open-source, 100% local.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
