@@ -8,9 +8,9 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 const SITE_URL = "https://tokentelemetry.com";
-const TITLE = "TokenTelemetry — See exactly what your coding agents cost, think, and do";
+const TITLE = "Token Telemetry (TokenTelemetry) — See exactly what your coding agents cost, think, and do";
 const DESCRIPTION =
-  "Local, read-only observability for Claude Code, Codex, Gemini CLI, Cursor, Copilot, and 4 more coding agents. Tokens, traces, cost — one command, no signup, 100% on your machine.";
+  "Token Telemetry (TokenTelemetry) is local, read-only observability for Claude Code, Codex, Gemini CLI, Cursor, Copilot, and 4 more coding agents. Tokens, traces, cost — one command, no signup, 100% on your machine.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   applicationName: "TokenTelemetry",
   keywords: [
+    "Token Telemetry",
+    "TokenTelemetry",
+    "tokentelemetry",
+    "tokentelemetry.com",
+    "token telementry",
+    "tokentelementry",
+    "token telemtry",
     "AI agent observability",
     "Claude Code dashboard",
     "Codex token tracking",
@@ -31,6 +38,17 @@ export const metadata: Metadata = {
   authors: [{ name: "Hemanth Vasi", url: "https://www.linkedin.com/in/vasi-hemanth/" }],
   creator: "Hemanth Vasi",
   alternates: { canonical: SITE_URL },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicon.ico"],
+  },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
@@ -63,8 +81,13 @@ export const metadata: Metadata = {
 const JSON_LD = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "TokenTelemetry",
+  name: "Token Telemetry",
+  alternateName: ["TokenTelemetry", "tokentelemetry", "Token-Telemetry"],
   url: SITE_URL,
+  sameAs: [
+    "https://github.com/VasiHemanth/tokentelemetry",
+    "https://www.linkedin.com/in/vasi-hemanth/",
+  ],
   description: DESCRIPTION,
   applicationCategory: "DeveloperApplication",
   operatingSystem: "macOS, Linux, Windows",
@@ -72,6 +95,19 @@ const JSON_LD = {
   license: "https://opensource.org/licenses/MIT",
   author: { "@type": "Person", name: "Hemanth Vasi", url: "https://www.linkedin.com/in/vasi-hemanth/" },
   codeRepository: "https://github.com/VasiHemanth/tokentelemetry",
+};
+
+const ORG_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Token Telemetry",
+  alternateName: ["TokenTelemetry", "tokentelemetry"],
+  url: SITE_URL,
+  logo: `${SITE_URL}/og.png`,
+  sameAs: [
+    "https://github.com/VasiHemanth/tokentelemetry",
+    "https://www.linkedin.com/in/vasi-hemanth/",
+  ],
 };
 
 const FAQ_LD = {
@@ -94,6 +130,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SiteHeader />
         {children}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_LD) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_LD) }} />
       </body>
     </html>
