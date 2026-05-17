@@ -9,6 +9,7 @@ import {
 import { useResource } from "@/lib/api";
 import { AGENTS, getAgent, type AgentKey } from "@/lib/agents";
 import SourceBadge from "@/components/SourceBadge";
+import { formatTokens, formatCost } from "@/lib/format";
 import {
   PageHeader, StatTile, Section, Card, CardHeader, CardTitle, CardEyebrow,
   Table, THead, TBody, TR, TH, TD, AgentBadge, Badge, Button, EmptyState, Skeleton,
@@ -365,14 +366,4 @@ function ActivityLoading() {
   );
 }
 
-function formatTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toLocaleString();
-}
-
-function formatCost(n: number) {
-  if (n === 0) return "$0.00";
-  if (n < 0.01) return "<$0.01";
-  return `$${n.toFixed(2)}`;
-}
+// formatters live in @/lib/format — imported at the top of this file.

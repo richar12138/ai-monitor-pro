@@ -10,6 +10,7 @@ import {
 import { useResource } from "@/lib/api";
 import { getAgent } from "@/lib/agents";
 import { cn } from "@/lib/cn";
+import { formatTokens, formatCost } from "@/lib/format";
 import {
   PageHeader, Section, Card, Badge, AgentBadge, Button, EmptyState, Skeleton,
   Table, THead, TBody, TR, TH, TD,
@@ -311,14 +312,4 @@ function ProjectsLoading({ view }: { view: ViewMode }) {
   );
 }
 
-function formatCost(usd: number) {
-  if (!usd) return "$0.00";
-  if (usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
-}
-function formatTokens(n: number) {
-  if (!n) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
+// formatters live in @/lib/format — imported at the top of this file.

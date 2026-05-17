@@ -13,6 +13,7 @@ import {
 import { useResource } from "@/lib/api";
 import { getAgent } from "@/lib/agents";
 import { useTheme } from "@/components/ThemeProvider";
+import { formatTokens as compact } from "@/lib/format";
 import {
   PageHeader, StatTile, Section, Card, CardHeader, CardTitle, CardEyebrow,
   Table, THead, TBody, TR, TH, TD, AgentBadge, Badge, EmptyState, Skeleton,
@@ -379,8 +380,4 @@ function pct(part: number, whole: number) {
   return ((part / Math.max(1, whole)) * 100).toFixed(1);
 }
 
-function compact(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
-  return n.toLocaleString();
-}
+// `compact` lives in @/lib/format (formatTokens) — see import at top of file.

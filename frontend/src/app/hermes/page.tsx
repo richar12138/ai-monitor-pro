@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import SourceBadge from "@/components/SourceBadge";
 import HermesIcon from "@/components/icons/HermesIcon";
+import { formatTokens, formatCost } from "@/lib/format";
 
 interface GatewayState {
   state: string | null;
@@ -152,7 +153,7 @@ export default function HermesPage() {
         <StatTile
           icon={<DollarSign size={14} />}
           label="Total cost"
-          value={loading ? "—" : `$${totalCost.toFixed(4)}`}
+          value={loading ? "—" : formatCost(totalCost)}
         />
         <StatTile
           icon={<Cpu size={14} />}
@@ -234,7 +235,7 @@ export default function HermesPage() {
                     {m}
                   </span>
                   <span className="tabular text-[var(--tt-fg-muted)]">
-                    {info.count} · ${info.cost.toFixed(4)}
+                    {info.count} · {formatCost(info.cost)}
                   </span>
                 </div>
               ))}
@@ -331,7 +332,7 @@ export default function HermesPage() {
             </CardTitle>
             <div className="ml-auto text-[11px] tabular text-[var(--tt-fg-muted)]">
               {g.sessions.length} session{g.sessions.length === 1 ? "" : "s"}
-              {g.totalCost > 0 && ` · $${g.totalCost.toFixed(4)}`}
+              {g.totalCost > 0 && ` · ${formatCost(g.totalCost)}`}
             </div>
           </CardHeader>
           <Table>
@@ -381,10 +382,10 @@ export default function HermesPage() {
                     </TD>
                     <TD className="text-right tabular text-[11px] text-[var(--tt-fg-muted)]">
                       <Link href={`/sessions/${s.id}?agent=hermes`} className="block">
-                        {s.cost && s.cost > 0 ? `$${s.cost.toFixed(4)}` : "—"}
+                        {s.cost && s.cost > 0 ? formatCost(s.cost) : "—"}
                         {s.tokens?.reasoning && s.tokens.reasoning > 0 ? (
                           <div className="text-[9px] text-[var(--tt-fg-faint)] uppercase tracking-wider">
-                            +{s.tokens.reasoning.toLocaleString()} reasoning
+                            +{formatTokens(s.tokens.reasoning)} reasoning
                           </div>
                         ) : null}
                       </Link>
