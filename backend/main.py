@@ -2722,11 +2722,16 @@ def _scan_sessions_sync():
             conn = sqlite3.connect(uri, uri=True, timeout=1.0)
             conn.row_factory = sqlite3.Row
             try:
+                # billing_base_url is newer; older Hermes DBs may lack it. Select
+                # it only when present so the whole scan doesn't fail on legacy
+                # schemas (the outer try/except would otherwise drop all sessions).
+                _cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
+                _base_url_col = "billing_base_url" if "billing_base_url" in _cols else "NULL AS billing_base_url"
                 srows = conn.execute(
                     "SELECT id, source, model, parent_session_id, started_at, ended_at, "
                     "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
                     "reasoning_tokens, estimated_cost_usd, actual_cost_usd, title, "
-                    "billing_provider, end_reason "
+                    f"billing_provider, {_base_url_col}, end_reason "
                     "FROM sessions"
                 ).fetchall()
                 for srow in srows:
@@ -2754,7 +2759,12 @@ def _scan_sessions_sync():
                     # Prefer Hermes's own cost (it knows exotic models we may not price)
                     cost = srow["actual_cost_usd"] if srow["actual_cost_usd"] is not None else srow["estimated_cost_usd"]
                     if cost is None:
-                        cost = calculate_cost(model, in_t, out_t, cached, provider=srow["billing_provider"], cache_creation_tokens=cache_write)
+                        cost = calculate_cost(
+                            model, in_t, out_t, cached,
+                            provider=srow["billing_provider"],
+                            cache_creation_tokens=cache_write,
+                            endpoint=srow["billing_base_url"],
+                        )
                     tokens["cost"] = cost
                     # First user message → display fallback when title is empty
                     first_user = ""
@@ -3520,6 +3530,39 @@ async def post_update_check(payload: dict = Body(...)):
     save_preferences({"update_check": enabled})
     env_off = bool(os.environ.get("TT_NO_UPDATE_CHECK"))
     return {"enabled": enabled, "env_forced_off": env_off, "effective": enabled and not env_off}
+
+
+@app.get("/config/power")
+async def get_power_config():
+    """Power & subscription cost config for local/subscription models.
+
+    `configured` tells the UI whether a power.json exists yet — when false the
+    returned values are the shipped defaults and the local-model electricity
+    branch is inactive until the user saves.
+    """
+    from power_config import load_power_config, has_user_config
+    cfg = load_power_config()
+    return {**cfg, "configured": has_user_config()}
+
+
+@app.put("/config/power")
+async def put_power_config(payload: dict = Body(...)):
+    """Persist power config. Body: {loadWatts?, costPerKwh?, subscriptionEndpoints?}.
+
+    Validation happens in power_config.save_power_config (bad values are skipped,
+    never surfaced as raw errors). Returns the full saved config.
+    """
+    from fastapi import HTTPException
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    from power_config import save_power_config
+    try:
+        cfg = save_power_config(payload)
+    except OSError:
+        # Disk/permissions issue — keep it human, no stack traces.
+        raise HTTPException(status_code=500, detail="Could not save power config to disk.")
+    _invalidate_sessions_cache()
+    return {**cfg, "configured": True}
 
 
 @app.get("/config/aliases")

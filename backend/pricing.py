@@ -289,6 +289,8 @@ def calculate_cost(
     cached_tokens: int = 0,
     provider: Optional[str] = None,
     cache_creation_tokens: int = 0,
+    endpoint: Optional[str] = None,
+    tok_per_sec: Optional[float] = None,
 ) -> float:
     """Estimate cost in USD. Prefer (provider, model) when provider is known.
 
@@ -297,7 +299,27 @@ def calculate_cost(
     rate — distinct from ``cached_tokens`` (cache READ), billed at the much
     cheaper ``cached_read`` rate. Defaults to 0 so existing positional callers
     are unaffected.
+
+    ``endpoint`` and ``tok_per_sec`` are optional and only affect the
+    local/subscription branches: if the session was served by a flat-subscription
+    endpoint the per-call cost is 0 (billed monthly), and a local model with no
+    API rate is priced by its electricity draw. All callers that omit these get
+    the unchanged per-token behaviour.
     """
+    # --- LOOKUP region -----------------------------------------------------
+    # Subscription / local-model branches go FIRST so they short-circuit before
+    # the per-token rate-math at the bottom. Both are opt-in via
+    # ~/.tokentelemetry/power.json; with no config the substring match never
+    # fires and unpriced models fall through to _default as before.
+    if endpoint:
+        try:
+            from power_config import is_subscription_endpoint
+            if is_subscription_endpoint(endpoint):
+                # Flat monthly subscription — per-call cost is tracked separately.
+                return 0.0
+        except Exception:
+            pass
+
     if not model_name:
         config = PRICING["_default"]
     else:
@@ -315,6 +337,23 @@ def calculate_cost(
                     config = PRICING[k]
                     break
         if not config:
+            # No known API rate for this model. If the user has opted in via
+            # ~/.tokentelemetry/power.json, treat it as a local model and price
+            # it by electricity instead of the (wrong) _default per-token rate.
+            try:
+                from power_config import (
+                    local_power_enabled, load_power_config, electricity_cost,
+                    DEFAULT_TOK_PER_SEC,
+                )
+                if local_power_enabled():
+                    pc = load_power_config()
+                    return electricity_cost(
+                        output_tokens,
+                        config=pc,
+                        tok_per_sec=tok_per_sec or DEFAULT_TOK_PER_SEC,
+                    )
+            except Exception:
+                pass
             config = PRICING["_default"]
 
     in_rate = config["in"] or 0
