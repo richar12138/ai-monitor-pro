@@ -1,6 +1,20 @@
 {
   "releases": [
     {
+      "tag": "2026-06-08",
+      "title": "Accurate cost for local & subscription models",
+      "highlights": [
+        {
+          "title": "Local models priced by electricity, not fake API rates",
+          "description": "Models you run yourself (Ollama, llama.cpp, vLLM) have no API bill — their real cost is power. Set your machine's watts under load and your kWh rate, and TokenTelemetry estimates the electricity cost instead of inventing a per-token charge."
+        },
+        {
+          "title": "Flat subscriptions now show $0 per call",
+          "description": "Endpoints you pay for monthly (Ollama Cloud Pro, a proxied gateway) are billed by subscription, not per token. List them as subscription endpoints and their sessions stop inflating your per-call cost totals."
+        }
+      ]
+    },
+    {
       "tag": "2026-06-07",
       "title": "Update check — now visible and yours to control",
       "highlights": [
