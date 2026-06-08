@@ -2,6 +2,17 @@
   "releases": [
     {
       "tag": "2026-06-08",
+      "title": "Local & Power insights dashboard",
+      "highlights": [
+        {
+          "title": "Dedicated Local & Power insights surface",
+          "description": "A new card on the dashboard brings your local model usage front and center. See your total local energy consumption (Wh/kWh), your estimated cloud savings from running locally, and a breakdown of which local models you use most.",
+          "href": "/"
+        }
+      ]
+    },
+    {
+      "tag": "2026-06-08",
       "title": "Real cost for the local models you run",
       "highlights": [
         {
