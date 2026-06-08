@@ -58,6 +58,7 @@ DEFAULTS: Dict[str, Any] = {
     "costPerKwh": DEFAULT_COST_PER_KWH,
     "subscriptionEndpoints": list(DEFAULT_SUBSCRIPTION_ENDPOINTS),
     "localEndpoints": list(DEFAULT_LOCAL_ENDPOINTS),
+    "referenceCloudModel": "claude-sonnet-4-6",
 }
 
 # Provider ids that always denote local/self-hosted inference (no API bill).
@@ -151,6 +152,10 @@ def load_power_config() -> Dict[str, Any]:
             e.strip() for e in leps if isinstance(e, str) and e.strip()
         ]
 
+    ref = raw.get("referenceCloudModel")
+    if isinstance(ref, str) and ref.strip():
+        config["referenceCloudModel"] = ref.strip()
+
     return config
 
 
@@ -181,6 +186,10 @@ def save_power_config(updates: Dict[str, Any]) -> Dict[str, Any]:
         config["localEndpoints"] = [
             e.strip() for e in leps if isinstance(e, str) and e.strip()
         ]
+
+    ref = updates.get("referenceCloudModel")
+    if isinstance(ref, str) and ref.strip():
+        config["referenceCloudModel"] = ref.strip()
 
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)

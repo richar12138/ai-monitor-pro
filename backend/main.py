@@ -3701,6 +3701,12 @@ def _cache_hit_pct(input_tokens: int, cached_tokens: int) -> Optional[float]:
 
 @app.get("/analytics")
 async def get_analytics():
+    from power_config import is_local_session, load_power_config, default_tok_per_sec_for_model
+    from insights import energy_wh, cloud_equiv_cost, savings_vs_cloud
+    pc = load_power_config()
+    load_watts = pc.get("loadWatts", 80)
+    ref_model = pc.get("referenceCloudModel", "claude-sonnet-4-6")
+
     sessions = await get_sessions_cached(); by_agent = {}; by_day = {}; by_model = {}
     # quality_by_agent: Dict[str, Dict[str, int]] = {}
     # total_edit_turns = 0
@@ -3708,24 +3714,42 @@ async def get_analytics():
     # total_measured_sessions = 0
     for s in sessions:
         agent = s["agent"]
-        if agent not in by_agent: by_agent[agent] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "session_count": 0}
+        if agent not in by_agent: by_agent[agent] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "energy_wh": 0.0, "savings_usd": 0.0, "session_count": 0}
         st = s.get("tokens", {})
         scost = s.get("cost", 0.0)
+        
+        # Calculate local insights
+        energy = 0.0
+        savings = 0.0
+        if is_local_session(model_name=s.get("model"), endpoint=s.get("endpoint"), provider=s.get("provider"), billing_mode=s.get("billing_mode")):
+            tok_per_sec = s.get("tok_per_sec")
+            if not tok_per_sec or tok_per_sec <= 0:
+                tok_per_sec = default_tok_per_sec_for_model(s.get("model"))
+            energy = energy_wh(st.get("output", 0), load_watts=load_watts, tok_per_sec=tok_per_sec)
+            cloud_cost = cloud_equiv_cost(ref_model, st.get("input", 0), st.get("output", 0), st.get("cached", 0))
+            savings = savings_vs_cloud(scost, cloud_cost)
+
         for k in ["input", "output", "cached", "total"]: by_agent[agent][k] += st.get(k, 0)
         by_agent[agent]["cost"] += scost
+        by_agent[agent]["energy_wh"] += energy
+        by_agent[agent]["savings_usd"] += savings
         by_agent[agent]["session_count"] += 1
         model_name = s.get("model") or f"{agent} (unknown)"
         if model_name not in by_model:
-            by_model[model_name] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "session_count": 0, "agent": agent}
+            by_model[model_name] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "energy_wh": 0.0, "savings_usd": 0.0, "session_count": 0, "agent": agent}
         for k in ["input", "output", "cached", "total"]: by_model[model_name][k] += st.get(k, 0)
         by_model[model_name]["cost"] += scost
+        by_model[model_name]["energy_wh"] += energy
+        by_model[model_name]["savings_usd"] += savings
         by_model[model_name]["session_count"] += 1
         # Bucket by LOCAL day, not UTC — a 9pm-PT session shouldn't land on the
         # next day just because the timestamp crossed midnight UTC.
         day = s["timestamp"].astimezone().strftime("%Y-%m-%d")
-        if day not in by_day: by_day[day] = {"total": 0, "input": 0, "output": 0, "cached": 0, "cost": 0.0}
+        if day not in by_day: by_day[day] = {"total": 0, "input": 0, "output": 0, "cached": 0, "cost": 0.0, "energy_wh": 0.0, "savings_usd": 0.0}
         for k in ["input", "output", "cached", "total"]: by_day[day][k] += st.get(k, 0)
         by_day[day]["cost"] += scost
+        by_day[day]["energy_wh"] += energy
+        by_day[day]["savings_usd"] += savings
         # q = s.get("quality") or {}
         # if q.get("measured"):
         #     agg = quality_by_agent.setdefault(agent, {"edit_turns": 0, "retry_turns": 0, "measured_sessions": 0})
@@ -3756,6 +3780,8 @@ async def get_analytics():
             "cached": total_cached,
             "total": sum(a["total"] for a in by_agent.values()),
             "cost": sum(a["cost"] for a in by_agent.values()),
+            "energy_wh": sum(a["energy_wh"] for a in by_agent.values()),
+            "savings_usd": sum(a["savings_usd"] for a in by_agent.values()),
             "cache_hit_pct": _cache_hit_pct(total_input, total_cached),
             # "quality": _quality_summary(total_edit_turns, total_retry_turns, total_measured_sessions),
         },

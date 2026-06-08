@@ -2,6 +2,22 @@
   "releases": [
     {
       "tag": "2026-06-08",
+      "title": "Local model insights: energy & cloud savings",
+      "highlights": [
+        {
+          "title": "Energy consumption insights",
+          "description": "TokenTelemetry now estimates the energy consumed (in Watt-hours) for local generation based on your actual hardware's power configuration and model throughput.",
+          "href": "/"
+        },
+        {
+          "title": "Savings vs. Cloud estimates",
+          "description": "Ever wonder how much you're saving by running models locally? TokenTelemetry compares your local generation cost against a configurable reference cloud model (defaulting to Claude 3.5 Sonnet) so you can track your API savings.",
+          "href": "/"
+        }
+      ]
+    },
+    {
+      "tag": "2026-06-08",
       "title": "Real cost for the local models you run",
       "highlights": [
         {
