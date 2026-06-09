@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 import re
+import hmac
 import json
 import yaml
 import sqlite3
@@ -145,11 +147,84 @@ app = FastAPI(title="TokenTelemetry API")
 # Enable CORS for the Next.js frontend.
 #
 # We use a regex over an explicit allowlist so the frontend can pick any local
-# port (the user can pass --port to start.sh / bin/cli.js). Origins are still
-# locked to loopback — only localhost/127.0.0.1 on any port are accepted.
+# port (the user can pass --port to start.sh / bin/cli.js). Loopback is always
+# allowed; additional hosts (IPs / hostnames) can be opted in for remote access
+# via the TT_ALLOWED_ORIGINS env var (comma-separated) — bin/cli.js wires it up
+# from --allowed-origins. Default behavior is unchanged: loopback-only.
+def _cors_origin_regex() -> str:
+    hosts = ["localhost", r"127\.0\.0\.1"]
+    for h in os.environ.get("TT_ALLOWED_ORIGINS", "").split(","):
+        h = h.strip()
+        if h:
+            hosts.append(re.escape(h))
+    return r"^https?://(" + "|".join(hosts) + r"):\d+$"
+
+# --- Remote-access auth gate -------------------------------------------------
+# When TT_AUTH_TOKEN is set (bin/cli.js sets it automatically for a non-loopback
+# --host, unless --insecure-no-auth), every *remote* request must present the
+# token as `Authorization: Bearer <token>` or a `?token=<token>` query param.
+# Loopback requests are always exempt, so the operator's own browser on the
+# server — and the default loopback-only setup — is unaffected. With no token
+# set the gate is a no-op: default behavior is byte-for-byte unchanged.
+#
+# IMPORTANT: this is registered BEFORE CORSMiddleware so CORS stays the
+# *outermost* layer (Starlette wraps the most-recently-added middleware on the
+# outside). That lets CORS answer OPTIONS preflight directly — browsers send no
+# Authorization on preflight — and decorate our 401 with the Access-Control
+# headers the browser needs to actually read the response instead of surfacing
+# an opaque CORS error.
+from starlette.middleware.base import BaseHTTPMiddleware
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_loopback(host: Optional[str]) -> bool:
+    """True only for loopback source addresses. An unknown client is treated as
+    remote (fail safe) so a missing peer can never bypass the gate."""
+    if not host:
+        return False
+    h = host.strip("[]")  # normalise bracketed IPv6 literals
+    if h in _LOOPBACK_HOSTS:
+        return True
+    # IPv4-mapped IPv6 form, e.g. ::ffff:127.0.0.1
+    if h.startswith("::ffff:") and h[len("::ffff:"):] in _LOOPBACK_HOSTS:
+        return True
+    return False
+
+
+def _presented_token(request: Request) -> str:
+    """Pull the caller's token from the Authorization header, falling back to a
+    `?token=` query param so browser-native resource loads (artifact <img>/<a>,
+    which can't set headers) can authenticate too."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer "):].strip()
+    return (request.query_params.get("token") or "").strip()
+
+
+class RemoteAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        token = os.environ.get("TT_AUTH_TOKEN", "").strip()
+        if not token:
+            return await call_next(request)  # gate disabled (local default)
+        client = request.client.host if request.client else None
+        if _is_loopback(client):
+            return await call_next(request)  # local is always exempt
+        presented = _presented_token(request)
+        if presented and hmac.compare_digest(presented, token):
+            return await call_next(request)
+        # Never echo the expected token; just say what's needed.
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Remote access requires an access token.", "auth": "token"},
+        )
+
+
+app.add_middleware(RemoteAuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -3012,6 +3087,24 @@ async def get_pricing():
     return {"updated": PRICING_UPDATED, "models": PRICING}
 
 
+@app.get("/remote-access")
+async def get_remote_access(request: Request):
+    """Connection info for the "connect a device" QR panel: the scan-to-open URL
+    (host + frontend port + bootstrap token) that bin/cli.js precomputed into
+    TT_REMOTE_CONNECT_URL. The token is a credential, so this is LOOPBACK-ONLY —
+    a remote device (even one holding the token) gets 403, so the token can never
+    be re-fetched over the network. Returns {enabled: false} when not exposed."""
+    from fastapi import HTTPException
+    client = request.client.host if request.client else None
+    if not _is_loopback(client):
+        raise HTTPException(status_code=403, detail="Not available remotely.")
+    url = os.environ.get("TT_REMOTE_CONNECT_URL", "").strip()
+    token = os.environ.get("TT_AUTH_TOKEN", "").strip()
+    if not url or not token:
+        return {"enabled": False}
+    return {"enabled": True, "url": url, "token": token}
+
+
 @app.get("/artifacts")
 async def get_artifact(path: str):
     """Stream a local artifact file securely."""
@@ -4658,4 +4751,16 @@ if __name__ == "__main__":
             except ValueError: pass
         return 8000
 
-    uvicorn.run(app, host="127.0.0.1", port=_resolve_port())
+    # Host resolution order: --host CLI arg → TT_HOST env var → 127.0.0.1.
+    # Default stays loopback; set 0.0.0.0 (or a specific interface IP) to expose
+    # the API for remote/tailnet access. Pair with TT_ALLOWED_ORIGINS for CORS.
+    def _resolve_host() -> str:
+        argv = sys.argv[1:]
+        for i, arg in enumerate(argv):
+            if arg == "--host" and i + 1 < len(argv):
+                return argv[i + 1]
+            if arg.startswith("--host="):
+                return arg.split("=", 1)[1]
+        return os.environ.get("TT_HOST") or "127.0.0.1"
+
+    uvicorn.run(app, host=_resolve_host(), port=_resolve_port())

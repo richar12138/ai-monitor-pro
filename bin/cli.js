@@ -17,6 +17,8 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const net = require('net');
+const crypto = require('crypto');
+const os = require('os');
 
 const rootDir = path.resolve(__dirname, '..');
 const backendDir = path.join(rootDir, 'backend');
@@ -37,7 +39,7 @@ function die(msg) {
 // Accepts --port / --api-port (and -p / -a shorthands), in `--flag value` or
 // `--flag=value` form. Anything unknown triggers the help text.
 function parseArgs(argv) {
-  const out = { frontPort: 3000, apiPort: 8000, dataDir: null };
+  const out = { frontPort: 3000, apiPort: 8000, host: '127.0.0.1', allowedOrigins: '', authToken: '', insecureNoAuth: false, dataDir: null };
   const take = (i) => {
     if (i + 1 >= argv.length) die(`expected a value after ${argv[i]}`);
     return argv[i + 1];
@@ -58,6 +60,13 @@ function parseArgs(argv) {
     else if (a.startsWith('--port='))          { setPort('frontPort', a.slice('--port='.length)); }
     else if (a === '-a' || a === '--api-port') { setPort('apiPort',   take(i)); i++; }
     else if (a.startsWith('--api-port='))      { setPort('apiPort',   a.slice('--api-port='.length)); }
+    else if (a === '--host')                   { out.host = take(i); i++; }
+    else if (a.startsWith('--host='))          { out.host = a.slice('--host='.length); }
+    else if (a === '--allowed-origins')        { out.allowedOrigins = take(i); i++; }
+    else if (a.startsWith('--allowed-origins=')) { out.allowedOrigins = a.slice('--allowed-origins='.length); }
+    else if (a === '--auth-token')             { out.authToken = take(i); i++; }
+    else if (a.startsWith('--auth-token='))    { out.authToken = a.slice('--auth-token='.length); }
+    else if (a === '--insecure-no-auth')       { out.insecureNoAuth = true; }
     else if (a === '-d' || a === '--data-dir') { setDataDir(take(i)); i++; }
     else if (a.startsWith('--data-dir='))      { setDataDir(a.slice('--data-dir='.length)); }
     else die(`unknown argument: ${a}\nRun with --help for usage.`);
@@ -65,22 +74,50 @@ function parseArgs(argv) {
   return out;
 }
 
+// Pick a concrete, reachable address for the connect/QR URL. 0.0.0.0 is a bind
+// wildcard, not a destination, so we can't hand it to a phone. Preference:
+//   1. an explicit non-wildcard --host (the operator named it),
+//   2. the first --allowed-origins entry (they told us how they'll reach it),
+//   3. the primary non-internal IPv4 of this box (best-effort autodetect).
+// Returns '' if nothing concrete is available.
+function pickConnectHost(host, allowedOrigins) {
+  if (host && !['0.0.0.0', '127.0.0.1', 'localhost'].includes(host)) return host;
+  const first = (allowedOrigins || '').split(',').map((s) => s.trim()).filter(Boolean)[0];
+  if (first) return first;
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family === 'IPv4' && !a.internal) return a.address;
+    }
+  }
+  return '';
+}
+
 function printHelp() {
   console.log([
     'Usage: tokentelemetry [options]',
     '',
     'Options:',
-    '  -p, --port <N>       Frontend (Next.js) port. Default 3000.',
-    '  -a, --api-port <N>   Backend (FastAPI) port. Default 8000.',
-    '  -d, --data-dir <P>   Where TokenTelemetry stores its config + state.',
-    '                       Default ~/.tokentelemetry. Use this to keep data off',
-    '                       your system drive (sets TOKENTELEMETRY_DATA_DIR).',
-    '  -h, --help           Show this help.',
+    '  -p, --port <N>            Frontend (Next.js) port. Default 3000.',
+    '  -a, --api-port <N>        Backend (FastAPI) port. Default 8000.',
+    '  -d, --data-dir <P>        Where TokenTelemetry stores its config + state.',
+    '                            Default ~/.tokentelemetry (sets TOKENTELEMETRY_DATA_DIR).',
+    '      --host <ADDR>         Backend bind address. Default 127.0.0.1 (loopback).',
+    '                            Use 0.0.0.0 (or an interface IP) to expose remotely.',
+    '      --allowed-origins <L> Comma-separated hosts allowed to load the dashboard',
+    '                            from another machine (CORS + Next dev origins).',
+    '      --auth-token <T>      Access token required for remote requests. If a',
+    '                            non-loopback --host is used and this is omitted, a',
+    '                            random token is generated and printed once.',
+    '      --insecure-no-auth    Disable the remote access token entirely. Only safe',
+    '                            on a fully trusted private network (e.g. a tailnet).',
+    '  -h, --help               Show this help.',
     '',
     'Examples:',
-    '  start.sh                                 # 3000 / 8000',
+    '  start.sh                                 # 3000 / 8000, localhost only',
     '  start.sh --port 4000 --api-port 9000     # custom both',
     '  start.sh -p 4000                         # frontend on 4000, backend stays 8000',
+    '  start.sh --host 0.0.0.0 \\               # expose on a tailnet/LAN (token auto-gen)',
+    '    --allowed-origins box.tailnet.ts.net,100.64.0.1',
     '  start.sh --data-dir /mnt/d/tt-data       # store config + state on D:',
   ].join('\n'));
 }
@@ -228,7 +265,7 @@ function ensureFrontend() {
 }
 
 async function start() {
-  const { frontPort, apiPort, dataDir } = parseArgs(process.argv.slice(2));
+  const { frontPort, apiPort, host, allowedOrigins, authToken, insecureNoAuth, dataDir } = parseArgs(process.argv.slice(2));
 
   // --data-dir is just a friendly front-end for TOKENTELEMETRY_DATA_DIR, which
   // the Python backend reads (tt_paths.data_dir). An explicit flag wins over an
@@ -247,14 +284,64 @@ async function start() {
   // and the auto-opened browser lands on the wrong URL.
   await ensurePortsFree([frontPort, apiPort]);
 
-  const apiBase = `http://127.0.0.1:${apiPort}`;
+  // Loopback binds display as "localhost"; a specific interface IP shows as-is.
+  const displayHost = (host === '0.0.0.0' || host === '127.0.0.1') ? 'localhost' : host;
+
+  // A concrete (non-wildcard, non-loopback) bind address is itself an origin the
+  // browser loads from, so fold it into the allow-list — `--host <ip>` then just
+  // works without also repeating the ip in --allowed-origins. 0.0.0.0 has no
+  // single hostname to derive, so that case still needs --allowed-origins.
+  const hostIsConcrete = host && !['0.0.0.0', '127.0.0.1', 'localhost'].includes(host);
+  const allowed = [allowedOrigins, hostIsConcrete ? host : ''].filter(Boolean).join(',');
+
+  // Remote access auth. A non-loopback bind exposes an otherwise unauthenticated
+  // API to the network — CORS does NOT stop direct (non-browser) clients — so we
+  // require an access token for *remote* requests (loopback is always exempt, so
+  // the operator's own browser on the box stays frictionless). Secure by default:
+  // a token is auto-generated when none is supplied, unless --insecure-no-auth is
+  // passed (for a fully trusted private network). The token is handed ONLY to the
+  // backend — never to the frontend env — so it never lands in the client bundle.
+  const hostIsRemote = host && !['127.0.0.1', 'localhost'].includes(host);
+  let authMode = 'off';      // 'off' | 'token' | 'insecure'
+  let resolvedToken = '';
+  if (hostIsRemote) {
+    if (insecureNoAuth) {
+      authMode = 'insecure';
+    } else {
+      // Honor an explicitly supplied token (flag wins over env, mirroring the
+      // TT_HOST / TT_API_PORT convention); otherwise mint a fresh random one.
+      resolvedToken = (authToken || process.env.TT_AUTH_TOKEN || '').trim()
+        || crypto.randomBytes(24).toString('base64url');
+      authMode = 'token';
+    }
+  }
+
+  // Scan-to-open URL for the "connect a device" QR. Needs a concrete reachable
+  // address (0.0.0.0 isn't one): prefer an explicit --host, else the first
+  // --allowed-origins entry, else the box's primary LAN IPv4. The token rides
+  // in the URL as a one-time bootstrap; the frontend stores it and strips it
+  // from the address bar on load (see frontend/src/lib/api.ts).
+  const connectHost = pickConnectHost(host, allowedOrigins);
+  const connectUrl = (authMode === 'token' && connectHost)
+    ? `http://${connectHost}:${frontPort}/?token=${encodeURIComponent(resolvedToken)}`
+    : '';
+
   console.log('\n→ launching services…');
-  const backend = spawn(venvPython, ['main.py', '--port', String(apiPort)], {
+  const backend = spawn(venvPython, ['main.py', '--port', String(apiPort), '--host', host], {
     cwd: backendDir,
     stdio: 'inherit',
     // detached on POSIX gives us a process group we can signal as a unit
     detached: !isWindows,
-    env: backendEnv,
+    // backendEnv carries TOKENTELEMETRY_DATA_DIR when --data-dir is set.
+    // TT_ALLOWED_ORIGINS opts extra hosts into the backend's CORS allowlist.
+    // TT_AUTH_TOKEN (when set) turns on the remote-access gate; empty == off.
+    // TT_REMOTE_CONNECT_URL backs the loopback-only /remote-access (QR) endpoint.
+    env: {
+      ...backendEnv,
+      TT_ALLOWED_ORIGINS: allowed,
+      TT_AUTH_TOKEN: resolvedToken,
+      TT_REMOTE_CONNECT_URL: connectUrl,
+    },
   });
 
   const frontend = spawn('npm', ['run', 'dev', '--', '--port', String(frontPort)], {
@@ -262,16 +349,23 @@ async function start() {
     stdio: 'inherit',
     shell: true,
     detached: !isWindows,
-    // NEXT_PUBLIC_API_BASE is read by frontend/src/lib/api.ts at startup so the
-    // browser knows where the backend lives. Without this the frontend would
-    // hardcode :8000 and silently 404 every fetch whenever --api-port is used.
-    env: { ...process.env, PORT: String(frontPort), NEXT_PUBLIC_API_BASE: apiBase },
+    // The frontend derives its API base from window.location at runtime (see
+    // frontend/src/lib/api.ts), so it only needs the API *port* — the host
+    // follows whatever address the dashboard was opened on (localhost, LAN IP,
+    // tailnet, …). TT_ALLOWED_ORIGINS feeds Next's allowedDevOrigins so the dev
+    // server serves its chunks to those non-localhost origins.
+    env: {
+      ...process.env,
+      PORT: String(frontPort),
+      NEXT_PUBLIC_API_PORT: String(apiPort),
+      TT_ALLOWED_ORIGINS: allowed,
+    },
   });
 
-  const dashUrl = `http://localhost:${frontPort}`;
+  const dashUrl = `http://${displayHost}:${frontPort}`;
   console.log(`\nDashboard:  ${dashUrl}`);
-  console.log(`API:        ${apiBase}`);
-  
+  console.log(`API:        http://${displayHost}:${apiPort}`);
+
   try {
     const resolvedDataDir = require('child_process').spawnSync(venvPython, ['-c', 'from tt_paths import data_dir; print(data_dir())'], { cwd: backendDir, encoding: 'utf8', env: backendEnv }).stdout.trim();
     if (resolvedDataDir) console.log(`Data dir:   ${resolvedDataDir}`);
@@ -279,6 +373,26 @@ async function start() {
     if (dataDir) console.log(`Data dir:   ${dataDir}`);
   }
 
+  if (authMode === 'token') {
+    console.log('\n──────────────────────────────────────────────────────────');
+    console.log('Remote access is ON. Other devices must enter this token:');
+    console.log(`\n    ${resolvedToken}\n`);
+    if (connectUrl) {
+      console.log('Or skip the typing — open this link (or scan its QR from the');
+      console.log('dashboard’s "Connect a device" panel) on the other device:');
+      console.log(`\n    ${connectUrl}\n`);
+    } else {
+      console.log('Open the dashboard from another device and paste it when');
+      console.log('prompted. (Your browser on this machine is exempt.)\n');
+    }
+    console.log('The token is shown once — re-run to rotate it.');
+    console.log('──────────────────────────────────────────────────────────');
+  } else if (authMode === 'insecure') {
+    console.log('\n⚠  WARNING: --insecure-no-auth — the dashboard is exposed to the');
+    console.log('   network with NO access token. Anyone who can reach this host can');
+    console.log('   read your data and change settings. Only use this on a fully');
+    console.log('   trusted private network (e.g. a tailnet).');
+  }
   console.log('Press Ctrl+C to stop.\n');
 
   // Auto-launch the dashboard once Next.js is actually responding.
