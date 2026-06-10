@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 import {
   BarChart3, TrendingUp, ArrowDownToLine, ArrowUpFromLine,
-  Zap, DollarSign, Cpu,
+  Zap, DollarSign, Cpu, GitBranch,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart as RePieChart, Pie, Cell,
@@ -24,6 +24,10 @@ interface AnalyticsData {
   by_agent: Record<string, AgentStats>;
   by_day: { date: string; total: number; input: number; output: number; cached: number; cost: number }[];
   by_model?: Record<string, AgentStats & { agent: string }>;
+  by_skill?: Record<string, { invocations: number; session_count: number }>;
+  by_mcp_server?: Record<string, { calls: number; tools: Record<string, number>; session_count: number }>;
+  by_subagent_type?: Record<string, { spawns: number; tokens: number; cost: number; session_count: number }>;
+  delegation?: { delegated_tokens: number; delegated_cost: number; sessions_with_spawns: number };
   total: { input: number; output: number; cached: number; total: number; cost: number };
   pricing_updated?: string;
 }
@@ -410,7 +414,131 @@ export default function AnalyticsPage() {
           </Card>
         </Section>
       )}
+
+      <EcosystemSection data={data} />
     </div>
+  );
+}
+
+/* Delegation + skills + MCP usage — which capabilities actually earn their keep.
+   Only agents whose logs record these signals contribute; the section hides
+   itself entirely when there's nothing to show (no fake zeros). */
+function EcosystemSection({ data }: { data: AnalyticsData }) {
+  const subagentTypes = Object.entries(data.by_subagent_type || {})
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.cost - a.cost);
+  const skills = Object.entries(data.by_skill || {})
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.invocations - a.invocations);
+  const mcpServers = Object.entries(data.by_mcp_server || {})
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.calls - a.calls);
+  const deleg = data.delegation;
+  if (subagentTypes.length === 0 && skills.length === 0 && mcpServers.length === 0) return null;
+
+  return (
+    <Section
+      title="Delegation & ecosystem"
+      description="Subagents your sessions spawned, skills you invoked, and MCP servers you actually used — recorded only where the agent's logs carry the signal (Claude Code is the richest source)."
+    >
+      {deleg && deleg.sessions_with_spawns > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <StatTile
+            label="Delegated tokens"
+            value={compact(deleg.delegated_tokens)}
+            hint="Consumed by spawned subagents — on top of session totals"
+            icon={<GitBranch size={16} />}
+            accent="var(--tt-brand)"
+          />
+          <StatTile
+            label="Delegated cost"
+            value={`$${deleg.delegated_cost.toFixed(2)}`}
+            hint="Priced per subagent's own model"
+            icon={<DollarSign size={16} />}
+            accent="var(--tt-warn)"
+          />
+          <StatTile
+            label="Sessions that delegated"
+            value={String(deleg.sessions_with_spawns)}
+            hint="Sessions that spawned at least one subagent"
+            icon={<Cpu size={16} />}
+            accent="var(--tt-success)"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {subagentTypes.length > 0 && (
+          <Card padding="lg">
+            <CardHeader>
+              <CardTitle><GitBranch size={14} className="text-[var(--tt-brand)]" /> Subagent types</CardTitle>
+              <CardEyebrow>by cost</CardEyebrow>
+            </CardHeader>
+            <ul className="space-y-2">
+              {subagentTypes.map((t) => (
+                <li key={t.name} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="min-w-0 flex flex-col">
+                    <span className="font-mono text-[var(--tt-fg)] truncate" title={t.name}>{t.name}</span>
+                    <span className="text-[var(--tt-fg-dim)]">{t.spawns} spawn{t.spawns === 1 ? "" : "s"} · {t.session_count} session{t.session_count === 1 ? "" : "s"}</span>
+                  </span>
+                  <span className="text-right shrink-0">
+                    <span className="block tabular font-semibold text-amber-300">${t.cost.toFixed(2)}</span>
+                    <span className="block tabular text-[var(--tt-fg-dim)]">{compact(t.tokens)} tok</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {skills.length > 0 && (
+          <Card padding="lg">
+            <CardHeader>
+              <CardTitle><Zap size={14} className="text-[var(--tt-success)]" /> Skills used</CardTitle>
+              <CardEyebrow>{skills.length} skills</CardEyebrow>
+            </CardHeader>
+            <ul className="space-y-2">
+              {skills.map((s) => (
+                <li key={s.name} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="font-mono text-[var(--tt-fg)] truncate" title={s.name}>/{s.name}</span>
+                  <span className="tabular text-[var(--tt-fg-dim)] whitespace-nowrap">
+                    ×{s.invocations} · {s.session_count} session{s.session_count === 1 ? "" : "s"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {mcpServers.length > 0 && (
+          <Card padding="lg">
+            <CardHeader>
+              <CardTitle><Cpu size={14} className="text-cyan-300" /> MCP servers</CardTitle>
+              <CardEyebrow>by calls</CardEyebrow>
+            </CardHeader>
+            <ul className="space-y-3">
+              {mcpServers.map((m) => {
+                const topTools = Object.entries(m.tools).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                return (
+                  <li key={m.name} className="text-[11px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[var(--tt-fg)] truncate" title={m.name}>{m.name}</span>
+                      <span className="tabular text-[var(--tt-fg-dim)] whitespace-nowrap">
+                        {m.calls} calls · {m.session_count} session{m.session_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-[var(--tt-fg-dim)] truncate">
+                      {topTools.map(([tool, n]) => `${tool} ×${n}`).join(" · ")}
+                      {Object.keys(m.tools).length > 3 && ` · +${Object.keys(m.tools).length - 3} more`}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        )}
+      </div>
+    </Section>
   );
 }
 
