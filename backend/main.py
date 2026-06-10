@@ -1886,8 +1886,13 @@ def _scan_grok_sessions() -> List[Dict[str, Any]]:
             if grok_spawns:
                 by_type: Dict[str, Dict[str, Any]] = {}
                 for sp in grok_spawns:
-                    bt = by_type.setdefault(sp.get("agent_type") or "unknown", {"count": 0})
+                    bt = by_type.setdefault(sp.get("agent_type") or "unknown",
+                                            {"count": 0, "child_session_ids": []})
                     bt["count"] += 1
+                    # Child ids let /analytics attribute each child session's
+                    # (already-counted) tokens to its subagent type.
+                    if sp.get("child_session_id"):
+                        bt["child_session_ids"].append(sp["child_session_id"])
                 sess["delegation"] = {"supported": True, "tokens_recorded": False,
                                       "spawn_count": len(grok_spawns),
                                       "by_type": by_type}
@@ -4628,9 +4633,33 @@ async def get_analytics():
     by_skill: Dict[str, Dict[str, Any]] = {}
     by_mcp_server: Dict[str, Dict[str, Any]] = {}
     by_subagent_type: Dict[str, Dict[str, Any]] = {}
-    delegation_totals = {"delegated_tokens": 0, "delegated_cost": 0.0,
-                         "sessions_with_spawns": 0}
+    # delegated_*: usage that exists NOWHERE else (claude subagent transcripts).
+    # linked_child_*: child sessions spawned by a parent — their tokens are
+    # already in by_agent/by_day/total above; surfaced here as an attribution
+    # view, never added on top.
+    delegation_totals: Dict[str, Any] = {
+        "delegated_tokens": 0, "delegated_cost": 0.0,
+        "sessions_with_spawns": 0,
+        "linked_children": 0, "linked_child_tokens": 0, "linked_child_cost": 0.0,
+        "by_agent": {},
+    }
+    # Child sessions are looked up per (agent, id) so grok by_type rows can
+    # attribute each child's tokens to its subagent type.
+    sess_by_key = {(s.get("agent"), s.get("id")): s for s in sessions}
+
+    def _subagent_row(t: str) -> Dict[str, Any]:
+        return by_subagent_type.setdefault(t, {
+            "spawns": 0, "tokens": 0, "cost": 0.0, "session_count": 0,
+            "tokens_recorded": False, "agents": []})
+
+    def _deleg_agent_row(agent: str) -> Dict[str, Any]:
+        return delegation_totals["by_agent"].setdefault(agent, {
+            "parents": 0, "spawns": 0, "children": 0,
+            "child_tokens": 0, "child_cost": 0.0,
+            "delegated_tokens": 0, "delegated_cost": 0.0})
+
     for s in sessions:
+        agent = s.get("agent")
         for sk in s.get("skills_used") or []:
             row = by_skill.setdefault(sk["name"], {"invocations": 0, "session_count": 0})
             row["invocations"] += sk["count"]
@@ -4641,18 +4670,60 @@ async def get_analytics():
             for tool, n in tools.items():
                 row["calls"] += n
                 row["tools"][tool] = row["tools"].get(tool, 0) + n
+
         deleg = s.get("delegation") or {}
+        spawns_here = deleg.get("spawn_count") or deleg.get("linked_children") or 0
+        if spawns_here:
+            delegation_totals["sessions_with_spawns"] += 1
+            arow = _deleg_agent_row(agent)
+            arow["parents"] += 1
+            arow["spawns"] += spawns_here
         for t, d in (deleg.get("by_type") or {}).items():
-            row = by_subagent_type.setdefault(t, {"spawns": 0, "tokens": 0, "cost": 0.0, "session_count": 0})
+            row = _subagent_row(t)
             row["spawns"] += d.get("count", 0)
-            row["tokens"] += d.get("total", 0)
-            row["cost"] = round(row["cost"] + (d.get("cost") or 0), 6)
             row["session_count"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+            # claude: per-type totals come straight from subagent transcripts.
+            if d.get("total") or d.get("cost"):
+                row["tokens"] += d.get("total", 0)
+                row["cost"] = round(row["cost"] + (d.get("cost") or 0), 6)
+                row["tokens_recorded"] = True
+            # grok: attribute each child SESSION's tokens to the spawning type.
+            for cid in d.get("child_session_ids") or []:
+                child = sess_by_key.get((agent, cid))
+                if child is None:
+                    continue
+                row["tokens"] += (child.get("tokens") or {}).get("total", 0)
+                row["cost"] = round(row["cost"] + (child.get("cost") or 0), 6)
+                row["tokens_recorded"] = True
+        # codex children carry their role; attribute the child session directly.
+        si = s.get("subagent_info")
+        if s.get("parent_session_id") and isinstance(si, dict) and si.get("role"):
+            row = _subagent_row(si["role"])
+            row["spawns"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+            row["tokens"] += (s.get("tokens") or {}).get("total", 0)
+            row["cost"] = round(row["cost"] + (s.get("cost") or 0), 6)
+            row["tokens_recorded"] = True
+
         if deleg.get("tokens_recorded") and deleg.get("delegated_total"):
             delegation_totals["delegated_tokens"] += deleg["delegated_total"]
             delegation_totals["delegated_cost"] = round(
                 delegation_totals["delegated_cost"] + (s.get("delegated_cost") or 0), 6)
-            delegation_totals["sessions_with_spawns"] += 1
+            arow = _deleg_agent_row(agent)
+            arow["delegated_tokens"] += deleg["delegated_total"]
+            arow["delegated_cost"] = round(arow["delegated_cost"] + (s.get("delegated_cost") or 0), 6)
+        if s.get("parent_session_id"):
+            delegation_totals["linked_children"] += 1
+            delegation_totals["linked_child_tokens"] += (s.get("tokens") or {}).get("total", 0)
+            delegation_totals["linked_child_cost"] = round(
+                delegation_totals["linked_child_cost"] + (s.get("cost") or 0), 6)
+            arow = _deleg_agent_row(agent)
+            arow["children"] += 1
+            arow["child_tokens"] += (s.get("tokens") or {}).get("total", 0)
+            arow["child_cost"] = round(arow["child_cost"] + (s.get("cost") or 0), 6)
 
     return {
         "by_agent": by_agent,

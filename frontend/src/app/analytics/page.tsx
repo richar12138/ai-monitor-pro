@@ -26,8 +26,12 @@ interface AnalyticsData {
   by_model?: Record<string, AgentStats & { agent: string }>;
   by_skill?: Record<string, { invocations: number; session_count: number }>;
   by_mcp_server?: Record<string, { calls: number; tools: Record<string, number>; session_count: number }>;
-  by_subagent_type?: Record<string, { spawns: number; tokens: number; cost: number; session_count: number }>;
-  delegation?: { delegated_tokens: number; delegated_cost: number; sessions_with_spawns: number };
+  by_subagent_type?: Record<string, { spawns: number; tokens: number; cost: number; session_count: number; tokens_recorded?: boolean; agents?: string[] }>;
+  delegation?: {
+    delegated_tokens: number; delegated_cost: number; sessions_with_spawns: number;
+    linked_children?: number; linked_child_tokens?: number; linked_child_cost?: number;
+    by_agent?: Record<string, { parents: number; spawns: number; children: number; child_tokens: number; child_cost: number; delegated_tokens: number; delegated_cost: number }>;
+  };
   total: { input: number; output: number; cached: number; total: number; cost: number };
   pricing_updated?: string;
 }
@@ -442,11 +446,11 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
       description="Subagents your sessions spawned, skills you invoked, and MCP servers you actually used — recorded only where the agent's logs carry the signal (Claude Code is the richest source)."
     >
       {deleg && deleg.sessions_with_spawns > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatTile
             label="Delegated tokens"
             value={compact(deleg.delegated_tokens)}
-            hint="Consumed by spawned subagents — on top of session totals"
+            hint="Claude subagent transcripts — on top of session totals"
             icon={<GitBranch size={16} />}
             accent="var(--tt-brand)"
           />
@@ -460,11 +464,51 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
           <StatTile
             label="Sessions that delegated"
             value={String(deleg.sessions_with_spawns)}
-            hint="Sessions that spawned at least one subagent"
+            hint="Across Claude, Grok, Codex, Antigravity, OpenCode & Hermes"
             icon={<Cpu size={16} />}
             accent="var(--tt-success)"
           />
+          <StatTile
+            label="Spawned child sessions"
+            value={String(deleg.linked_children ?? 0)}
+            hint={`${compact(deleg.linked_child_tokens ?? 0)} tokens · $${(deleg.linked_child_cost ?? 0).toFixed(2)} — already in session totals`}
+            icon={<GitBranch size={16} />}
+            accent="var(--tt-info)"
+          />
         </div>
+      )}
+
+      {/* Per-agent delegation: who spawns, and what their children consume */}
+      {deleg?.by_agent && Object.keys(deleg.by_agent).length > 0 && (
+        <Card padding="lg">
+          <CardHeader>
+            <CardTitle><GitBranch size={14} className="text-[var(--tt-brand)]" /> Delegation by agent</CardTitle>
+            <CardEyebrow>{Object.keys(deleg.by_agent).length} agents</CardEyebrow>
+          </CardHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
+            {Object.entries(deleg.by_agent)
+              .sort((a, b) => (b[1].delegated_cost + b[1].child_cost) - (a[1].delegated_cost + a[1].child_cost))
+              .map(([agent, a]) => (
+                <div key={agent} className="flex items-center justify-between gap-2 text-[11px] py-1">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <AgentBadge agent={agent} />
+                    <span className="text-[var(--tt-fg-dim)] whitespace-nowrap">
+                      {a.parents} session{a.parents === 1 ? "" : "s"} · {a.spawns} spawn{a.spawns === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <span className="tabular text-right whitespace-nowrap">
+                    {a.delegated_tokens > 0 ? (
+                      <span className="text-amber-300 font-semibold">+{compact(a.delegated_tokens)} · ${a.delegated_cost.toFixed(2)}</span>
+                    ) : a.children > 0 ? (
+                      <span className="text-[var(--tt-fg-muted)]">{compact(a.child_tokens)} in children · ${a.child_cost.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-[var(--tt-fg-dim)]">tokens n/a</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -479,11 +523,20 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
                 <li key={t.name} className="flex items-center justify-between gap-2 text-[11px]">
                   <span className="min-w-0 flex flex-col">
                     <span className="font-mono text-[var(--tt-fg)] truncate" title={t.name}>{t.name}</span>
-                    <span className="text-[var(--tt-fg-dim)]">{t.spawns} spawn{t.spawns === 1 ? "" : "s"} · {t.session_count} session{t.session_count === 1 ? "" : "s"}</span>
+                    <span className="text-[var(--tt-fg-dim)]">
+                      {t.spawns} spawn{t.spawns === 1 ? "" : "s"}
+                      {t.agents && t.agents.length > 0 && <> · {t.agents.join(", ")}</>}
+                    </span>
                   </span>
                   <span className="text-right shrink-0">
-                    <span className="block tabular font-semibold text-amber-300">${t.cost.toFixed(2)}</span>
-                    <span className="block tabular text-[var(--tt-fg-dim)]">{compact(t.tokens)} tok</span>
+                    {t.tokens_recorded !== false && (t.tokens > 0 || t.cost > 0) ? (
+                      <>
+                        <span className="block tabular font-semibold text-amber-300">${t.cost.toFixed(2)}</span>
+                        <span className="block tabular text-[var(--tt-fg-dim)]">{compact(t.tokens)} tok</span>
+                      </>
+                    ) : (
+                      <span className="block tabular text-[var(--tt-fg-dim)]">tokens n/a</span>
+                    )}
                   </span>
                 </li>
               ))}

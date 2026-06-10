@@ -361,7 +361,20 @@ def test_analytics_ecosystem_aggregates(monkeypatch):
          "mcp_usage": {"chrome": {"navigate": 1, "find": 2}},
          "delegation": {"supported": True, "tokens_recorded": True, "spawn_count": 0,
                         "delegated_total": 0}},
-        {**base, "id": "c", "agent": "codex", "delegation": {"supported": False}},
+        # grok: parent's by_type points at the child SESSION, whose tokens are
+        # already in totals — attribution only.
+        {**base, "id": "gp", "agent": "grok",
+         "delegation": {"supported": True, "tokens_recorded": False, "spawn_count": 1,
+                        "by_type": {"general-purpose": {"count": 1, "child_session_ids": ["gc"]}}},
+         "child_session_ids": ["gc"]},
+        {**base, "id": "gc", "agent": "grok", "parent_session_id": "gp",
+         "tokens": {"input": 100, "output": 0, "cached": 0, "total": 100}, "cost": 0.05},
+        # codex: the child carries its own role.
+        {**base, "id": "cp", "agent": "codex",
+         "delegation": {"supported": True, "tokens_recorded": False, "linked_children": 1}},
+        {**base, "id": "cc", "agent": "codex", "parent_session_id": "cp",
+         "subagent_info": {"role": "explorer", "nickname": "Dewey", "depth": 1},
+         "tokens": {"input": 60, "output": 10, "cached": 0, "total": 70}, "cost": 0.01},
     ]
 
     async def fake_sessions(fresh: bool = False):
@@ -372,13 +385,26 @@ def test_analytics_ecosystem_aggregates(monkeypatch):
     assert a["by_skill"] == {"graphify": {"invocations": 3, "session_count": 2}}
     assert a["by_mcp_server"] == {"chrome": {"calls": 6, "session_count": 2,
                                              "tools": {"navigate": 4, "find": 2}}}
-    assert a["by_subagent_type"] == {"Explore": {"spawns": 2, "tokens": 500,
-                                                 "cost": 0.2, "session_count": 1}}
-    assert a["delegation"] == {"delegated_tokens": 500, "delegated_cost": 0.2,
-                               "sessions_with_spawns": 1}
-    # Existing aggregates unchanged in shape: delegated usage NOT folded in.
+    assert a["by_subagent_type"]["Explore"] == {
+        "spawns": 2, "tokens": 500, "cost": 0.2, "session_count": 1,
+        "tokens_recorded": True, "agents": ["claude"]}
+    # grok type rows attribute the child session's tokens.
+    assert a["by_subagent_type"]["general-purpose"]["tokens"] == 100
+    assert a["by_subagent_type"]["general-purpose"]["agents"] == ["grok"]
+    # codex children aggregate by role with their own session tokens.
+    assert a["by_subagent_type"]["explorer"]["spawns"] == 1
+    assert a["by_subagent_type"]["explorer"]["tokens"] == 70
+    d = a["delegation"]
+    assert d["delegated_tokens"] == 500 and d["delegated_cost"] == 0.2
+    assert d["sessions_with_spawns"] == 3          # claude a + grok gp + codex cp
+    assert d["linked_children"] == 2 and d["linked_child_tokens"] == 170
+    assert d["by_agent"]["grok"] == {"parents": 1, "spawns": 1, "children": 1,
+                                     "child_tokens": 100, "child_cost": 0.05,
+                                     "delegated_tokens": 0, "delegated_cost": 0.0}
+    # Existing aggregates unchanged in shape: delegated usage NOT folded in,
+    # children counted once as their own sessions.
     assert a["by_agent"]["claude"]["total"] == 30
-    assert a["total"]["total"] == 45
+    assert a["total"]["total"] == 30 + 15 + 100 + 15 + 70
 
 
 # --- grok / codex / antigravity (probe-verified shapes) ----------------------
@@ -417,7 +443,7 @@ def test_scan_grok_delegation(scan_env, monkeypatch):
     by_id = {s["id"]: s for s in main._scan_sessions_sync() if s["agent"] == "grok"}
     assert by_id[GROK_PARENT]["delegation"] == {
         "supported": True, "tokens_recorded": False, "spawn_count": 1,
-        "by_type": {"general-purpose": {"count": 1}}}
+        "by_type": {"general-purpose": {"count": 1, "child_session_ids": [GROK_CHILD]}}}
     assert by_id[GROK_PARENT]["child_session_ids"] == [GROK_CHILD]
     assert by_id[GROK_CHILD]["parent_session_id"] == GROK_PARENT
     # Children stand alone token-wise (count-once).
