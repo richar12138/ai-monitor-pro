@@ -646,5 +646,17 @@ def test_endpoint_unsupported_agent():
     assert _run(main.session_delegation("anything", "gemini")) == {"supported": False}
 
 
+def test_subagent_trace_endpoint(scan_env):
+    make_claude_tree(scan_env / ".claude")
+    events = _run(main.session_subagent_trace(SID, "one", "claude"))
+    assert isinstance(events, list)
+    # Both real assistant lines come through; truncated/mid-write line skipped.
+    assert sum(1 for e in events if e.get("type") == "assistant") == 3  # 2 + synthetic
+    assert _run(main.session_subagent_trace(SID, "nope", "claude")) == {"error": "Not found"}
+    # Path traversal is rejected before any filesystem access.
+    assert _run(main.session_subagent_trace(SID, "../../../etc/passwd", "claude")) == {"error": "Invalid subagent id"}
+    assert _run(main.session_subagent_trace(SID, "one", "gemini")) == {"error": "Invalid agent"}
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

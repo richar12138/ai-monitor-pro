@@ -4195,6 +4195,56 @@ async def get_session_detail(session_id: str, agent: str):
     return {"error": "Invalid agent"}
 
 
+def _jsonl_events(path: Path) -> List[Dict[str, Any]]:
+    """Parse a transcript JSONL into the event list shape the trace UI expects
+    (same normalization as the claude branch of get_session_detail)."""
+    events: List[Dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                data = json.loads(line)
+            except Exception:
+                continue
+            if data.get("timestamp"):
+                try:
+                    ts = _aware(datetime.fromisoformat(data["timestamp"].replace('Z', '+00:00')))
+                    data["normalized_timestamp"] = ts.timestamp() * 1000
+                except Exception:
+                    pass
+            events.append(data)
+    return events
+
+
+_SUBAGENT_ID_RE = re.compile(r"^[\w.-]+$")
+
+
+@app.get("/sessions/{session_id}/subagents/{agent_id}/trace")
+async def session_subagent_trace(session_id: str, agent_id: str, agent: str):
+    """Raw trace of ONE subagent transcript, for the in-place drill-in viewer.
+
+    Only claude and cursor need this: their subagent transcripts are files
+    inside the parent's session dir, NOT sessions of their own (grok/codex/
+    opencode/hermes children are real sessions — fetch the normal detail
+    endpoint for those instead)."""
+    if not _SUBAGENT_ID_RE.match(agent_id or ""):
+        return {"error": "Invalid subagent id"}
+    if agent == "claude":
+        files = list(CLAUDE_DIR.glob(f"projects/**/{session_id}.jsonl"))
+        if not files:
+            return {"error": "Not found"}
+        t = files[0].parent / session_id / "subagents" / f"agent-{agent_id}.jsonl"
+        if not t.exists():
+            return {"error": "Not found"}
+        return _jsonl_events(t)
+    if agent == "cursor":
+        for pd in (CURSOR_DIR / "projects").glob("*"):
+            t = pd / "agent-transcripts" / session_id / "subagents" / f"{agent_id}.jsonl"
+            if t.exists():
+                return _jsonl_events(t)
+        return {"error": "Not found"}
+    return {"error": "Invalid agent"}
+
+
 @app.get("/sessions/{session_id}/delegation")
 async def session_delegation(session_id: str, agent: str):
     """Per-session subagent/delegation breakdown (overlay, like hermes-overlay).
