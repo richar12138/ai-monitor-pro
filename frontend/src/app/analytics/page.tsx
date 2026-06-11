@@ -518,7 +518,7 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
               <CardTitle><GitBranch size={14} className="text-[var(--tt-brand)]" /> Subagent types</CardTitle>
               <CardEyebrow>by cost</CardEyebrow>
             </CardHeader>
-            <ul className="space-y-2">
+            <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {subagentTypes.map((t) => (
                 <li key={t.name} className="flex items-center justify-between gap-2 text-[11px]">
                   <span className="min-w-0 flex flex-col">
@@ -550,7 +550,7 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
               <CardTitle><Zap size={14} className="text-[var(--tt-success)]" /> Skills used</CardTitle>
               <CardEyebrow>{skills.length} skills</CardEyebrow>
             </CardHeader>
-            <ul className="space-y-2">
+            <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {skills.map((s) => (
                 <li key={s.name} className="flex items-center justify-between gap-2 text-[11px]">
                   <span className="min-w-0">
@@ -574,7 +574,7 @@ function EcosystemSection({ data }: { data: AnalyticsData }) {
               <CardTitle><Cpu size={14} className="text-cyan-300" /> MCP servers</CardTitle>
               <CardEyebrow>by calls</CardEyebrow>
             </CardHeader>
-            <ul className="space-y-3">
+            <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {mcpServers.map((m) => {
                 const topTools = Object.entries(m.tools).sort((a, b) => b[1] - a[1]).slice(0, 3);
                 return (

@@ -317,7 +317,7 @@ export default function InsightsTab() {
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tt-fg-dim)] mb-2 flex items-center gap-1.5">
                     <GitBranch size={11} /> Subagent types
                   </div>
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                     {eco.types.map((t) => (
                       <li key={t.name} className="flex items-center justify-between gap-2 text-[11px]">
                         <span className="min-w-0">
@@ -344,8 +344,8 @@ export default function InsightsTab() {
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tt-fg-dim)] mb-2 flex items-center gap-1.5">
                     <Zap size={11} /> Skills used
                   </div>
-                  <ul className="space-y-1.5">
-                    {eco.skills.slice(0, 12).map(([name, r]) => (
+                  <ul className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {eco.skills.map(([name, r]) => (
                       <li key={name} className="flex items-center justify-between gap-2 text-[11px]">
                         <span className="min-w-0">
                           <span className="font-mono text-[var(--tt-fg)] truncate block" title={name}>/{name}</span>
@@ -362,8 +362,8 @@ export default function InsightsTab() {
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tt-fg-dim)] mb-2 flex items-center gap-1.5">
                     <Cpu size={11} /> MCP servers
                   </div>
-                  <ul className="space-y-2">
-                    {eco.mcp.slice(0, 8).map(([name, r]) => {
+                  <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {eco.mcp.map(([name, r]) => {
                       const top = Object.entries(r.tools).sort((a, b) => b[1] - a[1]).slice(0, 3);
                       return (
                         <li key={name} className="text-[11px]">
