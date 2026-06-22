@@ -56,9 +56,12 @@ export default function SummaryPanel({ sessionId, agent }: SummaryPanelProps) {
     setErrorInfo(null);
     try {
       const res = await generateSummary(sessionId, agent, force);
-      setSummary(res.summary);
-      if (res.error) setError(res.error);
-      if (res.error_info) setErrorInfo(res.error_info);
+      if (res.error) {
+        setError(res.error);
+        if (res.error_info) setErrorInfo(res.error_info);
+      } else {
+        setSummary(res.summary);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate summary.");
     } finally {
@@ -217,7 +220,7 @@ export default function SummaryPanel({ sessionId, agent }: SummaryPanelProps) {
                 <Stat label="Input" value={formatTokens(brief.tokens.input)} />
                 <Stat label="Output" value={formatTokens(brief.tokens.output)} />
                 <Stat label="Total" value={formatTokens(brief.tokens.total)} accent />
-                <Stat label="Cost" value={formatCost(brief.cost)} icon={<Coins size={11} />} accent />
+                <Stat label="API equiv." value={formatCost(brief.cost)} icon={<Coins size={11} />} accent />
                 <Stat label="User turns" value={brief.user_turns} />
                 {brief.model && (
                   <Badge variant="success" size="xs" className="font-mono normal-case" title={brief.model}>{brief.model}</Badge>
@@ -316,6 +319,7 @@ const ERROR_ICONS: Record<SummaryErrorInfo["category"], React.ComponentType<{ si
   timeout: Clock,
   network: ServerOff,
   quota: Ban,
+  too_large: Gauge,
   model: AlertOctagon,
   no_output: AlertCircle,
   unknown: AlertCircle,

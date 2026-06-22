@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 import re
+import hmac
 import json
 import yaml
 import sqlite3
@@ -16,8 +18,10 @@ from harness_config import (
     load_hidden, hide_project, unhide_project,
     list_aliases, save_aliases,
     load_budgets, save_budgets,
+    load_preferences, save_preferences,
 )
 import notifications as notif
+from tt_paths import data_dir
 
 def _aware(dt):
     """Ensure datetime is timezone-aware UTC. Naive inputs are assumed to be UTC."""
@@ -39,6 +43,81 @@ def _file_mtime_utc(path) -> datetime:
         return datetime.fromtimestamp(Path(path).stat().st_mtime, tz=timezone.utc)
     except Exception:
         return _now()
+
+def _load_copilot_cli_events(events_file: Path) -> List[dict]:
+    """Load a GitHub Copilot CLI session's append-only event log (#36)."""
+    rows: List[dict] = []
+    try:
+        with open(events_file, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    except OSError:
+        pass
+    return rows
+
+def _parse_copilot_iso(ts) -> Optional[datetime]:
+    """Copilot CLI timestamps are ISO-8601 with a trailing Z (e.g.
+    '2026-06-04T11:45:07.548Z'). Returns None for anything unparseable."""
+    if not isinstance(ts, str):
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _copilot_cli_tokens_from_metrics(metrics) -> Optional[dict]:
+    """Best-effort precise token totals from a closed session's
+    `session.shutdown.modelMetrics`. The exact shape varies by Copilot
+    version, so we defensively sum any recognizable input/output/cache token
+    counts found anywhere in the structure. Returns None when nothing usable
+    is present (caller then falls back to the per-message estimate)."""
+    if not isinstance(metrics, (dict, list)):
+        return None
+    tot = {"input": 0, "output": 0, "cached": 0}
+    found = False
+
+    def grab(obj):
+        nonlocal found
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                kl = str(k).lower()
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and "token" in kl:
+                    if "cache" in kl:
+                        tot["cached"] += int(v); found = True
+                    elif "out" in kl or "completion" in kl or "output" in kl:
+                        tot["output"] += int(v); found = True
+                    elif "in" in kl or "prompt" in kl:
+                        tot["input"] += int(v); found = True
+                else:
+                    grab(v)
+        elif isinstance(obj, list):
+            for x in obj:
+                grab(x)
+
+    grab(metrics)
+    return tot if found else None
+
+def _antigravity_surface_map() -> Dict[str, str]:
+    """Map Antigravity session id → surface (cli / ide / app) from the brain dirs,
+    so sessions discovered via the gemini-logs path can also be labelled. First
+    match wins if an id somehow appears under more than one surface."""
+    m: Dict[str, str] = {}
+    for _bd, _src in ANTIGRAVITY_BRAIN_SOURCES:
+        if not _bd.exists():
+            continue
+        try:
+            for p in _bd.iterdir():
+                if p.is_dir():
+                    m.setdefault(p.name, _src)
+        except OSError:
+            continue
+    return m
 
 def _pid_alive(pid: int) -> bool:
     """Cross-platform process liveness probe.
@@ -70,11 +149,84 @@ app = FastAPI(title="TokenTelemetry API")
 # Enable CORS for the Next.js frontend.
 #
 # We use a regex over an explicit allowlist so the frontend can pick any local
-# port (the user can pass --port to start.sh / bin/cli.js). Origins are still
-# locked to loopback — only localhost/127.0.0.1 on any port are accepted.
+# port (the user can pass --port to start.sh / bin/cli.js). Loopback is always
+# allowed; additional hosts (IPs / hostnames) can be opted in for remote access
+# via the TT_ALLOWED_ORIGINS env var (comma-separated) — bin/cli.js wires it up
+# from --allowed-origins. Default behavior is unchanged: loopback-only.
+def _cors_origin_regex() -> str:
+    hosts = ["localhost", r"127\.0\.0\.1"]
+    for h in os.environ.get("TT_ALLOWED_ORIGINS", "").split(","):
+        h = h.strip()
+        if h:
+            hosts.append(re.escape(h))
+    return r"^https?://(" + "|".join(hosts) + r"):\d+$"
+
+# --- Remote-access auth gate -------------------------------------------------
+# When TT_AUTH_TOKEN is set (bin/cli.js sets it automatically for a non-loopback
+# --host, unless --insecure-no-auth), every *remote* request must present the
+# token as `Authorization: Bearer <token>` or a `?token=<token>` query param.
+# Loopback requests are always exempt, so the operator's own browser on the
+# server — and the default loopback-only setup — is unaffected. With no token
+# set the gate is a no-op: default behavior is byte-for-byte unchanged.
+#
+# IMPORTANT: this is registered BEFORE CORSMiddleware so CORS stays the
+# *outermost* layer (Starlette wraps the most-recently-added middleware on the
+# outside). That lets CORS answer OPTIONS preflight directly — browsers send no
+# Authorization on preflight — and decorate our 401 with the Access-Control
+# headers the browser needs to actually read the response instead of surfacing
+# an opaque CORS error.
+from starlette.middleware.base import BaseHTTPMiddleware
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_loopback(host: Optional[str]) -> bool:
+    """True only for loopback source addresses. An unknown client is treated as
+    remote (fail safe) so a missing peer can never bypass the gate."""
+    if not host:
+        return False
+    h = host.strip("[]")  # normalise bracketed IPv6 literals
+    if h in _LOOPBACK_HOSTS:
+        return True
+    # IPv4-mapped IPv6 form, e.g. ::ffff:127.0.0.1
+    if h.startswith("::ffff:") and h[len("::ffff:"):] in _LOOPBACK_HOSTS:
+        return True
+    return False
+
+
+def _presented_token(request: Request) -> str:
+    """Pull the caller's token from the Authorization header, falling back to a
+    `?token=` query param so browser-native resource loads (artifact <img>/<a>,
+    which can't set headers) can authenticate too."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer "):].strip()
+    return (request.query_params.get("token") or "").strip()
+
+
+class RemoteAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        token = os.environ.get("TT_AUTH_TOKEN", "").strip()
+        if not token:
+            return await call_next(request)  # gate disabled (local default)
+        client = request.client.host if request.client else None
+        if _is_loopback(client):
+            return await call_next(request)  # local is always exempt
+        presented = _presented_token(request)
+        if presented and hmac.compare_digest(presented, token):
+            return await call_next(request)
+        # Never echo the expected token; just say what's needed.
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Remote access requires an access token.", "auth": "token"},
+        )
+
+
+app.add_middleware(RemoteAuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,8 +282,42 @@ GROK_SIGNALS = "signals.json"
 # Specialized storage paths
 VSCODE_STORAGE = VSCODE_BASE / "User/workspaceStorage"
 CURSOR_STORAGE = CURSOR_BASE / "User/workspaceStorage"
+# GitHub Copilot CLI / agent writes an append-only event log per session here,
+# separate from the VS Code Copilot chat store above (#36).
+COPILOT_CLI_DIR = HOME / ".copilot" / "session-state"
 ANTIGRAVITY_BRAIN_DIR = GEMINI_DIR / "antigravity" / "brain"
-PROJECT_ALIASES_FILE = HOME / ".tokentelemetry" / "aliases.json"
+# Antigravity ships as an IDE and a CLI, each with its own brain/ store; the bare
+# `antigravity/` is the original app store. (dir, surface) so sessions can be
+# labelled by where they came from. `antigravity-backup/` is intentionally excluded.
+ANTIGRAVITY_BRAIN_SOURCES = [
+    (GEMINI_DIR / "antigravity-cli" / "brain", "cli"),
+    (GEMINI_DIR / "antigravity-ide" / "brain", "ide"),
+    (GEMINI_DIR / "antigravity" / "brain", "app"),
+]
+ANTIGRAVITY_BRAIN_DIRS = [d for d, _ in ANTIGRAVITY_BRAIN_SOURCES]
+# `agy` (the Antigravity CLI) additionally persists each session's full trajectory
+# under antigravity-cli/conversations/<uuid>.db (SQLite; newer sessions) or
+# <uuid>.pb (protobuf; older), plus a flat prompt log in history.jsonl. The brain/
+# scanner above only reads derived markdown, so it falls back to a generic model
+# name and a heuristic project. We mine these CLI-only stores for the real model
+# display name and the exact project cwd — see _antigravity_cli_meta().
+ANTIGRAVITY_CLI_DIR = GEMINI_DIR / "antigravity-cli"
+PROJECT_ALIASES_FILE = data_dir() / "aliases.json"
+
+
+def _sqlite_ro_uri(db_path) -> str:
+    """Read-only sqlite URI that works on every OS.
+
+    f"file:{path}" breaks on Windows — backslashes are not URI path
+    separators, so sqlite fails to resolve the file and the scanner silently
+    skips the agent. Forward-slash the path (no-op on POSIX) and
+    percent-encode URI-special characters (spaces, '?', '#'); the drive
+    colon stays literal, which sqlite's Windows URI parser expects.
+    """
+    from urllib.parse import quote
+    p = db_path if hasattr(db_path, "as_posix") else Path(db_path)
+    return "file:" + quote(p.as_posix(), safe="/:") + "?mode=ro"
+
 
 def _load_project_aliases() -> Dict[str, str]:
     # Ensure directory exists
@@ -142,6 +328,12 @@ def _load_project_aliases() -> Dict[str, str]:
                 return json.load(f)
         except Exception: pass
     return {}
+
+# Sentinel project for Antigravity sessions whose real workspace can't be
+# recovered (pure chat/research runs that never entered a project dir). It groups
+# such sessions but is NOT a real workspace, so get_projects hides it from the
+# Projects view — the sessions still appear in the dashboard and session lists.
+ANTIGRAVITY_UNASSIGNED = "Antigravity / unassigned"
 
 def _antigravity_infer_project(text: str) -> str:
     import re
@@ -171,8 +363,284 @@ def _antigravity_infer_project(text: str) -> str:
             if len(parts) >= 4:
                 return "/".join(parts[:4])
             return path
+
+    return ANTIGRAVITY_UNASSIGNED
+
+def _estimate_antigravity_tokens(sess_dir: Path) -> dict:
+    import logging
+    tkns = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0}
+    tf = sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+    if not tf.exists():
+        tf = sess_dir / ".system_generated" / "logs" / "transcript_full.jsonl"
+    if not tf.exists():
+        return tkns
+        
+    cache_file = sess_dir / ".system_generated" / "logs" / "tokens_cache.json"
+    try:
+        if cache_file.exists() and cache_file.stat().st_mtime >= tf.stat().st_mtime:
+            with open(cache_file, "r", encoding="utf-8") as cf:
+                return json.load(cf)
+    except (OSError, json.JSONDecodeError) as e:
+        logging.debug(f"Failed to read token cache for {sess_dir}: {e}")
+
+    try:
+        with open(tf, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    tokens = len(line) // 4
+                    if data.get("source") == "MODEL":
+                        tkns["output"] += tokens
+                    else:
+                        tkns["input"] += tokens
+                except json.JSONDecodeError as e:
+                    logging.debug(f"Failed to parse line in {tf}: {e}")
+        tkns["total"] = tkns["input"] + tkns["output"]
+        
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as cf:
+                json.dump(tkns, cf)
+        except OSError as e:
+            logging.debug(f"Failed to write token cache for {sess_dir}: {e}")
             
-    return "Antigravity / unassigned"
+    except OSError as e:
+        logging.debug(f"Failed to access transcript for {sess_dir}: {e}")
+
+    return tkns
+
+# Model display name as embedded (protobuf string field) in Antigravity CLI
+# trajectories, e.g. "Gemini 3.1 Pro (High)". Deliberately strict — requires a
+# version number + tier word — so it never matches prose like "Gemini API ..."
+# or skill/plugin names ("Claude Code") that also appear in the blobs.
+_AG_MODEL_DISPLAY_RE = re.compile(
+    rb'\b((?:Gemini|Claude|GPT)[ ]\d[0-9.]*[ ]'
+    rb'(?:Pro|Flash|Ultra|Nano|Opus|Sonnet|Haiku)(?:[ ]\([A-Za-z]+\))?)'
+)
+
+# Tool-call steps in an Antigravity CLI trajectory embed a clean JSON arg blob.
+# Its Cwd/SearchPath fields are the session's real workspace root; the file-path
+# fields point at files it touched. These are the authoritative, always-present
+# record of *where* a session worked — unlike history.jsonl, a rolling log that
+# ages out. Paths under the agent's own home (~/.gemini/...) are internal
+# (brain/scratch/mcp), not user projects, and are ignored.
+_AG_WORKSPACE_RE = re.compile(rb'"(?:Cwd|SearchPath)"\s*:\s*"((?:[^"\\]|\\.)+)"')
+_AG_FILEPATH_RE = re.compile(rb'"(?:AbsolutePath|TargetFile|DirectoryPath)"\s*:\s*"((?:[^"\\]|\\.)+)"')
+
+
+def _antigravity_db_meta(db_path: Path) -> Dict[str, Optional[str]]:
+    """Read model + project for one Antigravity CLI session from its SQLite trajectory.
+
+    Single read-only pass over the DB:
+      - **model**: most common display name in the gen_metadata blobs (None for
+        older .pb-only sessions, which don't embed it).
+      - **project**: the workspace the session actually worked in, taken from the
+        Cwd/SearchPath of its tool calls (falling back to the project root of a
+        touched file). Paths under ~/.gemini are the agent's own internals and
+        are skipped, so a pure chat/research session that never entered a project
+        stays unattributed (project=None) instead of being mislabeled.
+
+    Best-effort: returns {"model": None, "project": None} on any DB/IO error."""
+    from collections import Counter
+    models: "Counter[str]" = Counter()
+    roots: "Counter[str]" = Counter()
+    files: "Counter[str]" = Counter()
+    gemini_home = str(GEMINI_DIR)
+    try:
+        con = sqlite3.connect(_sqlite_ro_uri(db_path), uri=True)
+        try:
+            for (blob,) in con.execute("SELECT data FROM gen_metadata WHERE data IS NOT NULL"):
+                if blob:
+                    for m in _AG_MODEL_DISPLAY_RE.findall(blob):
+                        models[m.decode("ascii", "ignore")] += 1
+            for (payload,) in con.execute("SELECT step_payload FROM steps WHERE step_payload IS NOT NULL"):
+                if not payload:
+                    continue
+                for m in _AG_WORKSPACE_RE.findall(payload):
+                    v = m.decode("utf-8", "ignore")
+                    if not v.startswith(gemini_home):
+                        roots[v] += 1
+                for m in _AG_FILEPATH_RE.findall(payload):
+                    v = m.decode("utf-8", "ignore")
+                    if not v.startswith(gemini_home):
+                        files[v] += 1
+        finally:
+            con.close()
+    except (sqlite3.Error, OSError):
+        return {"model": None, "project": None}
+
+    model = models.most_common(1)[0][0] if models else None
+    project: Optional[str] = None
+    if roots:
+        project = roots.most_common(1)[0][0]
+    elif files:
+        inferred = _antigravity_infer_project(files.most_common(1)[0][0])
+        if "unassigned" not in inferred:  # only accept a real derived root
+            project = inferred
+    return {"model": model, "project": project}
+
+
+# --- Antigravity CLI per-step trace -----------------------------------------
+# agy stores each trajectory step as a protobuf blob in conversations/<id>.db.
+# We have no .proto schema, so (like the metadata reader above) we pattern-match
+# the readable text + tool call out of the bytes — robust enough for a scrubbable
+# trace. step_type is a stable discriminator across recent agy builds.
+_AG_STEP_USER = 14            # the user's prompt
+_AG_STEP_REASONING = 15       # assistant reasoning narrative + a tool call
+_AG_STEP_TOOL_OUTPUT = 21     # result of a tool call
+_AG_STEP_SKIP = {90, 98, 23}  # system EPHEMERAL prompt, internal id, bare file ref
+_AG_TOOLNAME_RE = re.compile(rb'\x12.([a-z_]{3,40})\x1a')
+_AG_TEXT_RE = re.compile(rb'[\x09\x0a\x20-\x7e]{16,}')
+_AG_ARGJSON_RE = re.compile(rb'\{(?:[^{}\\]|\\.|\{(?:[^{}\\]|\\.)*\})*\}')
+
+
+def _ag_best_text(payload: bytes) -> str:
+    """Longest readable text run in a step blob, excluding JSON arg objects."""
+    runs = [t.decode("utf-8", "ignore") for t in _AG_TEXT_RE.findall(payload or b"")]
+    runs = [r for r in runs if not r.lstrip().startswith("{")]
+    if not runs:
+        return ""
+    # Trim a leading 1-2 char protobuf framing token ("k\nicheck…" → "icheck…").
+    txt = max(runs, key=len).strip()
+    txt = re.sub(r"^[a-zA-Z]{1,2}\n", "", txt)
+    return txt.strip()
+
+
+def _ag_tool_call(payload: bytes):
+    """(tool_name, parsed_args|None) for a step blob, or (None, None)."""
+    m = _AG_TOOLNAME_RE.search(payload or b"")
+    if not m:
+        return None, None
+    name = m.group(1).decode("ascii", "ignore")
+    args = None
+    jm = _AG_ARGJSON_RE.search(payload or b"")
+    if jm:
+        try:
+            args = json.loads(jm.group(0).decode("utf-8", "ignore"))
+        except Exception:
+            args = None
+    return name, args
+
+
+def _ag_event(role: str, content: list, sid: str, idx: int, order: int) -> Dict[str, Any]:
+    return {
+        "id": f"{sid}-step-{idx}",
+        "type": role,                       # "user" | "assistant"
+        "role": role,
+        "message": {"role": role, "content": content},
+        "normalized_timestamp": order * 1000,
+    }
+
+
+def _antigravity_cli_trace(db_path: Path, session_id: str) -> List[Dict[str, Any]]:
+    """Build a Claude-format per-step trace from an agy session's SQLite steps.
+
+    Returns events the existing viewer renders (user / reasoning / tool / tool
+    output), or [] when nothing usable is found (caller falls back to brain)."""
+    try:
+        con = sqlite3.connect(_sqlite_ro_uri(db_path), uri=True)
+    except sqlite3.Error:
+        return []
+    try:
+        rows = con.execute(
+            "SELECT idx, step_type, step_payload FROM steps ORDER BY idx"
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        con.close()
+
+    msgs: List[Dict[str, Any]] = []
+    order = 0
+    for idx, stype, payload in rows:
+        if stype in _AG_STEP_SKIP or not payload:
+            continue
+        text = _ag_best_text(payload)
+        if stype == _AG_STEP_USER:
+            if not text:
+                continue
+            order += 1
+            msgs.append(_ag_event("user", [{"type": "text", "text": text}], session_id, idx, order))
+        elif stype == _AG_STEP_TOOL_OUTPUT:
+            if not text:
+                continue
+            order += 1
+            msgs.append(_ag_event("user", [{"type": "tool_result", "content": text[:6000]}], session_id, idx, order))
+        else:
+            tool, args = _ag_tool_call(payload)
+            # Reasoning narrative and the tool call are split into separate steps
+            # so both are counted and render distinctly (thinking → reasoning, the
+            # call → tool).
+            if stype == _AG_STEP_REASONING and text and not text.lstrip().startswith(("{", "<")):
+                order += 1
+                msgs.append(_ag_event("assistant", [{"type": "thinking", "text": text}], session_id, idx, order))
+            if tool:
+                order += 1
+                msgs.append(_ag_event("assistant", [{"type": "tool_use", "name": tool, "input": args or {"preview": text[:600]}}], session_id, idx, order))
+            elif stype != _AG_STEP_REASONING and text:
+                order += 1
+                msgs.append(_ag_event("assistant", [{"type": "text", "text": text}], session_id, idx, order))
+    return msgs
+
+
+def _antigravity_cli_meta(cli_dir: Path = ANTIGRAVITY_CLI_DIR) -> Dict[str, Dict[str, Any]]:
+    """Enrich Antigravity CLI (`agy`) sessions from its own stores.
+
+    The brain/ scanner only sees derived markdown, so it labels every CLI session
+    with a generic model ("gemini (antigravity)") and a project heuristically
+    guessed from the task/plan text. Here we recover the ground truth, preferring
+    the per-session SQLite trajectory (permanent) over history.jsonl (a rolling
+    log that ages out):
+
+      1. model + project from each conversations/<uuid>.db (see _antigravity_db_meta);
+      2. project from history.jsonl (conversationId -> workspace) as a fallback for
+         sessions whose trajectory recorded no workspace (e.g. older .pb sessions).
+
+    Session ids in brain/ are the conversation UUIDs, so the returned map keys
+    line up 1:1. Returns {session_id: {"model": str, "project": str}} with each
+    field present only when found. Best-effort — never raises."""
+    meta: Dict[str, Dict[str, Any]] = {}
+    # 1. Authoritative, permanent: each session's own SQLite trajectory.
+    conv = cli_dir / "conversations"
+    try:
+        db_files = sorted(conv.glob("*.db")) if conv.exists() else []
+    except OSError:
+        db_files = []
+    for db in db_files:
+        dm = _antigravity_db_meta(db)
+        entry: Dict[str, Any] = {}
+        if dm.get("model"):
+            entry["model"] = dm["model"]
+        if dm.get("project"):
+            entry["project"] = dm["project"]
+        if entry:
+            meta[db.stem] = entry
+    # 2. Fallback project source: the flat prompt log. Build a last-wins map
+    #    (newest cwd per conversation), then fill only sessions the .db didn't
+    #    resolve — so a project from the authoritative .db always wins.
+    hist_project: Dict[str, str] = {}
+    hist = cli_dir / "history.jsonl"
+    try:
+        if hist.exists():
+            with open(hist, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    cid, ws = rec.get("conversationId"), rec.get("workspace")
+                    if cid and ws:
+                        hist_project[cid] = ws  # last line wins => latest cwd
+    except OSError:
+        pass
+    for cid, ws in hist_project.items():
+        meta.setdefault(cid, {}).setdefault("project", ws)
+    return meta
 
 class TokenUsage(BaseModel):
     input: int = 0
@@ -352,7 +820,7 @@ def _hermes_memory_io(session_id: str) -> Dict[str, Any]:
     }
     for db_path in _hermes_dbs():
         try:
-            uri = f"file:{db_path}?mode=ro"
+            uri = _sqlite_ro_uri(db_path)
             conn = sqlite3.connect(uri, uri=True, timeout=1.0)
             try:
                 rows = conn.execute(
@@ -1010,7 +1478,7 @@ import time as _upd_time
 import urllib.request as _urlreq
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_TT_HOME = HOME / ".tokentelemetry"
+_TT_HOME = data_dir()
 _UPDATE_CACHE = _TT_HOME / ".update-check.json"
 _REPO_OWNER = "VasiHemanth"
 _REPO_NAME = "tokentelemetry"
@@ -1190,11 +1658,25 @@ def _release_id(releases: List[Dict[str, Any]], fallback: Optional[str]) -> Opti
     rid = "|".join(p for p in [top.get("tag"), top.get("title")] if p)
     return rid or fallback
 
+def _update_check_enabled() -> bool:
+    """Whether the dashboard may contact GitHub for version/release info.
+
+    Two ways to turn it off, env var taking precedence so ops/enterprise can
+    enforce it regardless of the in-app setting:
+      - TT_NO_UPDATE_CHECK=1 (env) — hard off, not user-overridable; and
+      - the `update_check` preference (Settings toggle), default on.
+    This is the *only* outbound network call the app makes; it sends no logs,
+    sessions, or usage data — just a version/UPDATE.json fetch."""
+    if os.environ.get("TT_NO_UPDATE_CHECK"):
+        return False
+    return bool(load_preferences().get("update_check", True))
+
 
 @app.get("/version")
 async def get_version():
     """Banner data: how far behind the local checkout is + 1-3 curated bullets
-    about what's in the update. Set TT_NO_UPDATE_CHECK=1 to disable."""
+    about what's in the update. Disable via the Settings toggle or, to enforce
+    it for everyone, TT_NO_UPDATE_CHECK=1."""
     current = _local_commit()
     base: Dict[str, Any] = {
         "current": current,
@@ -1206,7 +1688,7 @@ async def get_version():
         "source": "none",
         "repo": f"{_REPO_OWNER}/{_REPO_NAME}",
     }
-    if os.environ.get("TT_NO_UPDATE_CHECK"):
+    if not _update_check_enabled():
         base["source"] = "disabled"
         return base
     if not current:
@@ -1239,8 +1721,7 @@ async def get_version():
 async def root():
     return {"message": "TokenTelemetry API is running"}
 
-@app.get("/agents")
-async def get_available_agents():
+def _list_available_agents() -> list:
     agents = []
     if CLAUDE_DIR.exists(): agents.append("claude")
     if CODEX_DIR.exists(): agents.append("codex")
@@ -1251,12 +1732,17 @@ async def get_available_agents():
     if QWEN_DIR.exists(): agents.append("qwen")
     if VIBE_DIR.exists(): agents.append("vibe")
     if CURSOR_DIR.exists(): agents.append("cursor")
-    if VSCODE_STORAGE.exists(): agents.append("copilot")
+    if VSCODE_STORAGE.exists() or COPILOT_CLI_DIR.exists(): agents.append("copilot")
     if OPENCODE_DB.exists(): agents.append("opencode")
     if _hermes_dbs(): agents.append("hermes")
     if GROK_SESSIONS_DIR.exists(): agents.append("grok")
     # if OLLAMA_DIR.exists(): agents.append("ollama")
     return agents
+
+
+@app.get("/agents")
+async def get_available_agents():
+    return _list_available_agents()
 
 # @app.get("/local-runtime")
 # async def get_local_runtime():
@@ -1380,6 +1866,7 @@ def _scan_grok_sessions() -> List[Dict[str, Any]]:
             tokens["output"] = 0
             tokens["cached"] = 0
 
+            # Grok Build exposes only a single context-footprint total (no cache-write field); nothing to pass.
             tokens["cost"] = calculate_cost(model, tokens.get("input", 0), tokens.get("output", 0), tokens.get("cached", 0))
 
             # Prefer signals.modelsUsed for the model when available.
@@ -1441,6 +1928,12 @@ def _scan_grok_sessions() -> List[Dict[str, Any]]:
                 "commit": summary.get("head_commit"),
             }
 
+            # Subagent spawns: Grok writes <session>/subagents/<id>/meta.json with
+            # {subagent_type, description, status, duration_ms, tool_calls, turns,
+            #  parent_session_id, child_session_id}. The child runs as its OWN
+            # session dir (already counted above/below) — annotation only.
+            grok_spawns = _grok_subagent_meta(sess_id_dir)
+
             sess = {
                 "id": sid,
                 "agent": "grok",
@@ -1464,9 +1957,69 @@ def _scan_grok_sessions() -> List[Dict[str, Any]]:
                     "last_active_at": summary.get("last_active_at"),
                 },
             }
+            if grok_spawns:
+                by_type: Dict[str, Dict[str, Any]] = {}
+                for sp in grok_spawns:
+                    bt = by_type.setdefault(sp.get("agent_type") or "unknown",
+                                            {"count": 0, "child_session_ids": []})
+                    bt["count"] += 1
+                    # Child ids let /analytics attribute each child session's
+                    # (already-counted) tokens to its subagent type.
+                    if sp.get("child_session_id"):
+                        bt["child_session_ids"].append(sp["child_session_id"])
+                sess["delegation"] = {"supported": True, "tokens_recorded": False,
+                                      "spawn_count": len(grok_spawns),
+                                      "by_type": by_type}
+                sess["child_session_ids"] = [sp["child_session_id"] for sp in grok_spawns
+                                             if sp.get("child_session_id")]
             out.append(sess)
 
+    # Children are full sessions in the same bucket — annotate them with their
+    # parent (count-once: their tokens already stand on their own).
+    grok_by_id = {s["id"]: s for s in out}
+    for s in out:
+        for cid in s.get("child_session_ids") or []:
+            child = grok_by_id.get(cid)
+            if child is not None:
+                child["parent_session_id"] = s["id"]
     return out
+
+
+def _grok_subagent_meta(sess_dir: Path) -> List[Dict[str, Any]]:
+    """Read Grok Build subagent spawn records for one session.
+
+    Verified shape (grok 0.2.39): <session>/subagents/<spawn-id>/meta.json with
+    subagent_type, description, prompt, status, started_at/completed_at,
+    duration_ms, tool_calls, turns, effective_model_id, parent_session_id and
+    child_session_id — the child is a full sibling session directory.
+    """
+    sub_dir = sess_dir / "subagents"
+    entries: List[Dict[str, Any]] = []
+    try:
+        if not sub_dir.is_dir():
+            return entries
+        for meta_path in sorted(sub_dir.glob("*/meta.json")):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    m = json.load(f)
+            except Exception:
+                continue
+            if not isinstance(m, dict):
+                continue
+            entries.append({
+                "agent_id": m.get("subagent_id") or meta_path.parent.name,
+                "agent_type": m.get("subagent_type") or "unknown",
+                "description": m.get("description"),
+                "status": m.get("status"),
+                "duration_ms": m.get("duration_ms"),
+                "tool_calls": m.get("tool_calls"),
+                "turns": m.get("turns"),
+                "model": m.get("effective_model_id"),
+                "child_session_id": m.get("child_session_id"),
+            })
+    except Exception:
+        pass
+    return entries
 
 
 def _reconstruct_vscode_chat_jsonl(path) -> Dict[str, Any]:
@@ -1528,6 +2081,278 @@ def _reconstruct_vscode_chat_jsonl(path) -> Dict[str, Any]:
                 elif kind == 2 and 0 <= leaf < len(parent) and isinstance(parent[leaf], list):
                     parent[leaf].extend(v) if isinstance(v, list) else parent[leaf].append(v)
     return data
+
+
+def _opencode_resolve_model(val):
+    """Resolve an OpenCode model name from a model payload.
+
+    OpenCode stores the model in several shapes depending on provider and
+    version: a dict (assistant/user message `model`, or the session-level
+    `model` column), a JSON-encoded string of that dict, or a plain model
+    string. The session-level blob uses the key ``id`` (e.g.
+    ``{"id":"claude-opus-4.6","providerID":"github-copilot"}``) while message
+    payloads use ``modelID`` — so we try both. Returns None if nothing usable.
+    """
+    if not val:
+        return None
+    if isinstance(val, str):
+        s = val.strip()
+        if s.startswith("{"):
+            try:
+                val = json.loads(s)
+            except Exception:
+                return s or None
+        else:
+            return s or None
+    if isinstance(val, dict):
+        return (val.get("id") or val.get("modelID") or val.get("modelId")
+                or val.get("providerID"))
+    return None
+
+
+# Agents whose local logs record subagent/child-session spawns at all.
+# claude: full token rollup; cursor: spawn count only (transcripts carry no
+# usage fields); opencode/hermes: parent/child linkage between real sessions;
+# grok: subagents/<id>/meta.json spawn records, children are sibling sessions;
+# codex: child rollouts carry thread_source="subagent" + parent thread id;
+# antigravity: parent brain transcript INVOKE_SUBAGENT steps name the child
+# conversation ids. (All verified empirically by running the CLIs — see
+# DESIGN.md "probe findings".)
+_DELEGATION_CAPABLE_AGENTS = {"claude", "cursor", "opencode", "hermes",
+                              "grok", "codex", "antigravity"}
+
+
+# content is JSON-escaped inside the INVOKE_SUBAGENT step record, so the quote
+# before the uuid may appear as \" in the raw line.
+_AG_CONVERSATION_ID_RE = re.compile(
+    r'conversationId\\?["\']?\s*:\s*\\?["\']'
+    r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})')
+
+
+def _antigravity_subagent_children(sid: str) -> List[str]:
+    """Child conversation ids spawned by an Antigravity session, from the
+    INVOKE_SUBAGENT steps in its brain transcript. Empty when none/no transcript."""
+    kids: List[str] = []
+    for brain_dir in ANTIGRAVITY_BRAIN_DIRS:
+        tpath = brain_dir / sid / ".system_generated" / "logs" / "transcript.jsonl"
+        try:
+            if not tpath.exists():
+                continue
+            with open(tpath, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if "INVOKE_SUBAGENT" not in line:
+                        continue
+                    for cid in _AG_CONVERSATION_ID_RE.findall(line):
+                        if cid != sid and cid not in kids:
+                            kids.append(cid)
+        except Exception:
+            continue
+    return kids
+
+
+def _antigravity_link_subagents(sessions: List[Dict[str, Any]]) -> None:
+    """Link Antigravity parent conversations to their spawned subagents.
+
+    `agy` supports parallel subagents; each spawn creates a full sibling
+    conversation. The parent's brain transcript
+    (brain/<id>/.system_generated/logs/transcript.jsonl) records an
+    INVOKE_SUBAGENT step whose content embeds the child's conversationId.
+    Children are already counted as their own sessions — annotation only.
+    """
+    ag = {s["id"]: s for s in sessions if s.get("agent") == "antigravity"}
+    if not ag:
+        return
+    for sid, sess in ag.items():
+        kids = _antigravity_subagent_children(sid)
+        if kids:
+            sess["child_session_ids"] = kids
+            sess["delegation"] = {"supported": True, "tokens_recorded": False,
+                                  "linked_children": len(kids)}
+            for cid in kids:
+                child = ag.get(cid)
+                if child is not None:
+                    child["parent_session_id"] = sid
+
+# Skill / slash-command invocations (Claude Code). Two structured signals:
+#   - assistant tool_use named "Skill" with input.skill = "<name>";
+#   - <command-name>/<name></command-name> tags echoed into user lines.
+# The tag also fires for built-in CLI commands (/model, /usage, ...) which are
+# NOT skills — counting those would drown real skill usage in noise.
+_COMMAND_NAME_RE = re.compile(r"<command-name>/?([\w.:-]+)</command-name>")
+_BUILTIN_CLI_COMMANDS = {
+    "add-dir", "agents", "bashes", "bug", "clear", "compact", "config",
+    "context", "cost", "doctor", "exit", "export", "fast", "help", "hooks",
+    "ide", "install-github-app", "login", "logout", "mcp", "memory",
+    "migrate-installer", "model", "output-style", "permissions", "plan", "plugin",
+    "privacy-settings", "quit", "release-notes", "resume", "rewind", "status",
+    "statusline", "terminal-setup", "theme", "todos", "upgrade", "usage", "vim",
+}
+
+
+# Codex records no structured skill event (verified on 0.136 by invoking a
+# sample skill): activation shows up only as the agent READING the skill's
+# SKILL.md through a tool call. The path inside function_call arguments is the
+# one reliable breadcrumb — match ".../skills/<name>/SKILL.md" (either slash).
+_CODEX_SKILL_RE = re.compile(r'skills[/\\]+([\w.-]+)[/\\]+SKILL\.md')
+
+
+def _count_tool(tool_counts: Dict[str, int], name) -> None:
+    if name:
+        tool_counts[name] = tool_counts.get(name, 0) + 1
+
+
+def _mcp_usage_from_counts(tool_counts: Dict[str, int]) -> Dict[str, Dict[str, int]]:
+    """Group MCP tool-call counts by server. Non-MCP names skipped.
+
+    Naming conventions differ per agent (both verified in real logs):
+      - claude/cursor/qwen-style: mcp__<server>__<tool>  (double underscore)
+      - gemini-style: mcp_<server>_<tool>, sometimes wrapped as
+        default_api:mcp_<server>_<tool>; servers may contain dashes
+        (local-server) so only the FIRST underscore after the server splits.
+    """
+    out: Dict[str, Dict[str, int]] = {}
+    for name, n in tool_counts.items():
+        if not isinstance(name, str):
+            continue
+        raw = name
+        if raw.startswith("default_api:"):
+            raw = raw[len("default_api:"):]
+        server_name = tool = None
+        if raw.startswith("mcp__"):
+            parts = raw.split("__", 2)
+            if len(parts) == 3 and parts[1] and parts[2]:
+                server_name, tool = parts[1], parts[2]
+        elif raw.startswith("mcp_"):
+            rest = raw[len("mcp_"):]
+            if "_" in rest:
+                server_name, tool = rest.split("_", 1)
+        if not server_name or not tool:
+            continue
+        server = out.setdefault(server_name, {})
+        server[tool] = server.get(tool, 0) + n
+    return out
+
+
+def _attach_tool_usage(sess: Dict[str, Any], tool_counts: Dict[str, int],
+                       skill_counts: Optional[Dict[str, int]] = None) -> None:
+    """Attach tool_counts / mcp_usage / skills_used to a session dict (only when
+    non-empty, so agents without the signal simply lack the keys)."""
+    if tool_counts:
+        sess["tool_counts"] = tool_counts
+        mcp = _mcp_usage_from_counts(tool_counts)
+        if mcp:
+            sess["mcp_usage"] = mcp
+    if skill_counts:
+        sess["skills_used"] = [
+            {"name": k, "count": v}
+            for k, v in sorted(skill_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+
+
+def _claude_subagent_usage(session_file: Path, sid: str) -> Optional[Dict[str, Any]]:
+    """Roll up subagent (Task/Agent tool) usage for one Claude Code session.
+
+    Claude Code writes each spawned subagent's full transcript to
+      <project-dir>/<sessionId>/subagents/agent-<agentId>.jsonl
+    with a sibling agent-<agentId>.meta.json {agentType, description, toolUseId}.
+    These files are NOT sessions — their usage is counted nowhere else, so this
+    rollup is the only place it surfaces (count-once invariant: the parent's own
+    token fields stay untouched; delegated usage is a separate bucket).
+
+    Each subagent runs its own context and often a DIFFERENT model than the
+    parent (e.g. Explore on Haiku under an Opus session), so cost is computed
+    per file with that file's model. Cache semantics match the main scanner:
+    cached = high-water-mark of cache_read per transcript, cache writes are
+    billed per event and accumulate.
+
+    Returns None when the session has no subagents/ dir; otherwise
+    {spawn_count, subagents: [...], totals: {...}, cost}.
+    """
+    sub_dir = session_file.parent / sid / "subagents"
+    try:
+        if not sub_dir.is_dir():
+            return None
+    except Exception:
+        return None
+    entries: List[Dict[str, Any]] = []
+    for f in sorted(sub_dir.glob("agent-*.jsonl")):
+        agent_id = f.stem[len("agent-"):]
+        agent_type = None
+        description = None
+        tool_use_id = None
+        try:
+            with open(f.with_name(f.stem + ".meta.json"), "r", encoding="utf-8") as mf:
+                meta = json.load(mf)
+            if isinstance(meta, dict):
+                agent_type = meta.get("agentType")
+                description = meta.get("description")
+                tool_use_id = meta.get("toolUseId")
+        except Exception:
+            pass
+        tokens = {"input": 0, "output": 0, "cached": 0, "cache_creation": 0,
+                  "cache_creation_1h": 0, "total": 0}
+        model = None
+        try:
+            with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    try:
+                        data = json.loads(line)
+                    except Exception:
+                        continue
+                    if data.get("type") != "assistant":
+                        continue
+                    msg = data.get("message", {}) if isinstance(data.get("message"), dict) else {}
+                    m = msg.get("model")
+                    if m and m != "<synthetic>" and not model:
+                        model = m
+                    # Fallback identity when meta.json is missing/corrupt.
+                    if not agent_type and data.get("attributionAgent"):
+                        agent_type = data.get("attributionAgent")
+                    usage = msg.get("usage", {}) if isinstance(msg.get("usage"), dict) else {}
+                    if not usage:
+                        continue
+                    cr = usage.get("cache_read_input_tokens", 0) or 0
+                    cc = usage.get("cache_creation_input_tokens", 0) or 0
+                    cc_1h = (usage.get("cache_creation", {}) or {}).get("ephemeral_1h_input_tokens", 0) or 0
+                    tokens["input"] += usage.get("input_tokens", 0) or 0
+                    tokens["output"] += usage.get("output_tokens", 0) or 0
+                    tokens["cached"] = max(tokens["cached"], cr)
+                    tokens["cache_creation"] += cc
+                    tokens["cache_creation_1h"] += cc_1h
+        except Exception:
+            continue
+        tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
+        cost = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"],
+                              cache_creation_tokens=tokens["cache_creation"],
+                              cache_creation_1h_tokens=tokens["cache_creation_1h"])
+        entries.append({
+            "agent_id": agent_id,
+            "agent_type": agent_type or "unknown",
+            "description": description,
+            "tool_use_id": tool_use_id,
+            "model": model,
+            "tokens": tokens,
+            "cost": cost,
+        })
+    if not entries:
+        return None
+    totals = {"input": 0, "output": 0, "cached": 0, "cache_creation": 0,
+              "cache_creation_1h": 0, "total": 0}
+    by_type: Dict[str, Dict[str, Any]] = {}
+    for e in entries:
+        for k in totals:
+            totals[k] += e["tokens"][k]
+        bt = by_type.setdefault(e["agent_type"], {"count": 0, "total": 0, "cost": 0.0})
+        bt["count"] += 1
+        bt["total"] += e["tokens"]["total"]
+        bt["cost"] = round(bt["cost"] + (e["cost"] or 0), 6)
+    return {
+        "spawn_count": len(entries),
+        "subagents": entries,
+        "totals": totals,
+        "by_type": by_type,
+        "cost": round(sum(e["cost"] or 0 for e in entries), 6),
+    }
 
 
 def _scan_sessions_sync():
@@ -1643,6 +2468,8 @@ def _scan_sessions_sync():
 
                 # pending_edit_tool_ids: Set[str] = set()  # quality signals (commented out)
                 # prior_edit_failed = False
+                tool_counts: Dict[str, int] = {}
+                skill_counts: Dict[str, int] = {}
                 try:
                     with open(session_file, "r", encoding="utf-8", errors="replace") as f:
                         for line in f:
@@ -1658,19 +2485,26 @@ def _scan_sessions_sync():
                                 if usage:
                                     cr = usage.get("cache_read_input_tokens", 0) or 0
                                     cc = usage.get("cache_creation_input_tokens", 0) or 0
-                                    # cache_creation is billed at ~1.25x input rate; fold into input
-                                    # as the closest approximation under calculate_cost's single-param API.
-                                    sess["tokens"]["input"]  += (usage.get("input_tokens", 0) or 0) + cc
+                                    cc_1h = (usage.get("cache_creation", {}) or {}).get("ephemeral_1h_input_tokens", 0) or 0
+                                    sess["tokens"]["input"]  += usage.get("input_tokens", 0) or 0
                                     sess["tokens"]["output"] += usage.get("output_tokens", 0) or 0
                                     # cached = unique cached-prefix size (high-water-mark), NOT per-turn sum
                                     sess["tokens"]["cached"] = max(sess["tokens"]["cached"], cr)
                                     sess["tokens"]["_cached_sum"] = sess["tokens"].get("_cached_sum", 0) + cr
+                                    # cache_creation (write) IS billed per event → cumulative, like input.
+                                    sess["tokens"]["cache_creation"] = sess["tokens"].get("cache_creation", 0) + cc
+                                    sess["tokens"]["cache_creation_1h"] = sess["tokens"].get("cache_creation_1h", 0) + cc_1h
                                 sess["tokens"]["total"] = sess["tokens"]["input"] + sess["tokens"]["output"] + sess["tokens"]["cached"]
-                                sess["cost"] = calculate_cost(sess.get("model"), sess["tokens"]["input"], sess["tokens"]["output"], sess["tokens"].get("_cached_sum", sess["tokens"]["cached"]))
+                                sess["cost"] = calculate_cost(sess.get("model"), sess["tokens"]["input"], sess["tokens"]["output"], sess["tokens"]["cached"], cache_creation_tokens=sess["tokens"].get("cache_creation", 0), cache_creation_1h_tokens=sess["tokens"].get("cache_creation_1h", 0))
                                 for item in msg.get("content", []):
                                     if item.get("type") == "tool_use":
                                         tool = item.get("name")
                                         if tool not in sess["mcp_tools"]: sess["mcp_tools"].append(tool)
+                                        _count_tool(tool_counts, tool)
+                                        if tool == "Skill":
+                                            skill = (item.get("input") or {}).get("skill")
+                                            if skill:
+                                                skill_counts[skill] = skill_counts.get(skill, 0) + 1
                                         if tool == "ExitPlanMode":
                                             plan_text = (item.get("input") or {}).get("plan") or ""
                                             if plan_text:
@@ -1693,6 +2527,11 @@ def _scan_sessions_sync():
                                 u_content = u_msg.get("content", "")
                                 if "/plan" in str(u_content):
                                     sess["has_plan"] = True
+                                # Slash-command echoes: count skill invocations,
+                                # skip built-in CLI commands (/model, /usage, ...).
+                                for cmd in _COMMAND_NAME_RE.findall(str(u_content)):
+                                    if cmd not in _BUILTIN_CLI_COMMANDS:
+                                        skill_counts[cmd] = skill_counts.get(cmd, 0) + 1
                                 # Quality signals (retry chain tracking) commented out:
                                 # if isinstance(u_content, list):
                                 #     for it in u_content:
@@ -1703,21 +2542,40 @@ def _scan_sessions_sync():
                                 #     prior_edit_failed = False
                                 #     pending_edit_tool_ids = set()
                 except Exception: continue
+                _attach_tool_usage(sess, tool_counts, skill_counts)
+                # Subagent (Task/Agent) rollup — separate "delegated" bucket so the
+                # parent's own token fields stay exactly as before. Full per-subagent
+                # breakdown is served by /sessions/{id}/delegation, the list carries
+                # only the summary.
+                deleg = _claude_subagent_usage(session_file, sid)
+                sess["delegation"] = {
+                    "supported": True,
+                    "tokens_recorded": True,
+                    "spawn_count": deleg["spawn_count"] if deleg else 0,
+                    "delegated_total": deleg["totals"]["total"] if deleg else 0,
+                }
+                if deleg:
+                    sess["delegation"]["by_type"] = deleg["by_type"]
+                    sess["tokens"]["delegated_input"] = deleg["totals"]["input"]
+                    sess["tokens"]["delegated_output"] = deleg["totals"]["output"]
+                    sess["tokens"]["delegated_cached"] = deleg["totals"]["cached"]
+                    sess["tokens"]["delegated_cache_creation"] = deleg["totals"]["cache_creation"]
+                    sess["delegated_cost"] = deleg["cost"]
         sessions.extend(claude_sessions.values())
     # 2. Codex
     codex_index = CODEX_DIR / "session_index.jsonl"
-    if codex_index.exists():
+    if codex_index.exists() or (CODEX_DIR / "sessions").is_dir():
         codex_sessions = {}
         # Pre-index Codex rollout files
         codex_file_map = {}
         try:
             for f in (CODEX_DIR / "sessions").rglob("rollout-*.jsonl"):
-                # stem: rollout-2025-10-21T16-55-35-019a0684-74e3-7423-af75-41c73aab7d68
-                # sid: 019a0684-74e3-7423-af75-41c73aab7d68
                 parts = f.stem.split("-")
                 if len(parts) >= 6:
                     sid = "-".join(parts[-5:])
-                    codex_file_map[sid] = f
+                    if sid not in codex_file_map:
+                        codex_file_map[sid] = []
+                    codex_file_map[sid].append(f)
         except Exception: pass
 
         try:
@@ -1731,11 +2589,27 @@ def _scan_sessions_sync():
                             codex_sessions[sid] = {"id": sid, "agent": "codex", "project": "unknown", "timestamp": ts, "text": data.get("thread_name"), "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "mcp_tools": [], "has_plan": False, "plans": [], "model": None, "artifacts": []}
                     except Exception: continue
         except Exception: pass
+
+        # The index is no longer maintained by recent Codex versions (observed
+        # frozen since codex 0.13x): exec runs and subagent threads never get
+        # an entry, and neither do new interactive sessions. Discover every
+        # session from the rollout files themselves; the index above only
+        # contributes nicer thread names for legacy entries.
+        for sid, files in codex_file_map.items():
+            if sid in codex_sessions:
+                continue
+            try:
+                ts = max(_file_mtime_utc(f) for f in files)
+            except Exception:
+                ts = _now()
+            codex_sessions[sid] = {"id": sid, "agent": "codex", "project": "unknown", "timestamp": ts, "text": None, "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "mcp_tools": [], "has_plan": False, "plans": [], "model": None, "artifacts": []}
         
         # Process the 100 most recent sessions
         for sid, sess in sorted(codex_sessions.items(), key=lambda kv: kv[1]["timestamp"], reverse=True)[:100]:
-            rollout_file = codex_file_map.get(sid)
-            if rollout_file:
+            rollout_files = codex_file_map.get(sid, [])
+            rollout_files.sort(key=lambda f: f.name)
+            day_snap = {}
+            for rollout_file in rollout_files:
                 try:
                     with open(rollout_file, "r", encoding="utf-8", errors="replace") as f:
                         for line in f:
@@ -1748,9 +2622,42 @@ def _scan_sessions_sync():
                                     sess["model"] = data["payload"].get("model")
                                 if not sess.get("_provider"):
                                     sess["_provider"] = data["payload"].get("model_provider")
+                                # Subagent threads (multi_agent feature): the child
+                                # rollout's session_meta carries thread_source ==
+                                # "subagent" plus source.subagent.thread_spawn with
+                                # the parent thread id, depth, role and nickname.
+                                # forked_from_id alone is NOT enough — user-initiated
+                                # `codex fork` sets it too with thread_source "user".
+                                _src = data["payload"].get("source")
+                                _spawn = (_src.get("subagent") or {}).get("thread_spawn") if isinstance(_src, dict) else None
+                                if data["payload"].get("thread_source") == "subagent" or _spawn:
+                                    _spawn = _spawn or {}
+                                    _pid = _spawn.get("parent_thread_id") or data["payload"].get("forked_from_id")
+                                    if _pid:
+                                        sess["parent_session_id"] = _pid
+                                    sess["subagent_info"] = {
+                                        "role": _spawn.get("agent_role") or data["payload"].get("agent_role"),
+                                        "nickname": _spawn.get("agent_nickname") or data["payload"].get("agent_nickname"),
+                                        "depth": _spawn.get("depth"),
+                                    }
                             if data.get("type") == "turn_context" and not sess.get("model"):
                                 sess["model"] = data.get("payload", {}).get("model")
                             if data.get("type") == "event_msg":
+                                ts_str = data.get("timestamp")
+                                event_day = None
+                                if ts_str:
+                                    try:
+                                        event_dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                                        event_day = _aware(event_dt).strftime("%Y-%m-%d")
+                                    except Exception: pass
+
+                                # Sessions discovered from rollouts (not the stale
+                                # index) have no thread_name; first user prompt is
+                                # the natural display.
+                                if not sess.get("text") and (data.get("payload") or {}).get("type") == "user_message":
+                                    _um = data["payload"].get("message")
+                                    if isinstance(_um, str) and _um.strip():
+                                        sess["text"] = _um.strip()[:120]
                                 usage = ((data.get("payload") or {}).get("info") or {}).get("total_token_usage") or {}
                                 if usage:
                                     # OpenAI/Codex semantics differ from Anthropic:
@@ -1769,15 +2676,25 @@ def _scan_sessions_sync():
                                     # extra (not folded into output_tokens). Otherwise reasoning is implicit.
                                     output_billable = output + (reasoning if total_record > gross_input + output else 0)
 
+                                    if event_day:
+                                        day_snap[event_day] = (gross_input, cached, output_billable)
+
                                     sess["tokens"]["input"]  = max(sess["tokens"]["input"],  net_input)
                                     sess["tokens"]["cached"] = max(sess["tokens"]["cached"], cached)
                                     sess["tokens"]["output"] = max(sess["tokens"]["output"], output_billable)
                                     sess["tokens"]["total"]  = sess["tokens"]["input"] + sess["tokens"]["cached"] + sess["tokens"]["output"]
+                                    # Codex/OpenAI usage has no cache-write field (only cached read); nothing to pass.
                                     sess["cost"] = calculate_cost(sess.get("model"), sess["tokens"]["input"], sess["tokens"]["output"], sess["tokens"]["cached"])
                             if data.get("type") == "response_item":
                                 if data.get("payload", {}).get("type") == "function_call":
                                     tool = data["payload"].get("name")
                                     if tool not in sess["mcp_tools"]: sess["mcp_tools"].append(tool)
+                                    _count_tool(sess.setdefault("tool_counts", {}), tool)
+                                    # Skill activation breadcrumb: the agent reads
+                                    # <skills-dir>/<name>/SKILL.md (no structured event).
+                                    for _skm in _CODEX_SKILL_RE.finditer(data["payload"].get("arguments") or ""):
+                                        _sc = sess.setdefault("_skill_counts", {})
+                                        _sc[_skm.group(1)] = _sc.get(_skm.group(1), 0) + 1
                                     if tool == "update_plan":
                                         try:
                                             args = json.loads(data["payload"].get("arguments") or "{}")
@@ -1790,17 +2707,53 @@ def _scan_sessions_sync():
                                                 sess["plans"].append({"session_id": sid, "agent": "codex", "timestamp": sess["timestamp"], "content": content})
                                         except Exception: pass
                 except Exception: pass
+            
+            if day_snap:
+                tbd = {}
+                pg = pc = po = 0
+                model_for_cost = sess.get("model") or sess.get("_provider")
+                for day in sorted(day_snap.keys()):
+                    g, c, o = day_snap[day]
+                    dg, dc, do = max(0, g - pg), max(0, c - pc), max(0, o - po)
+                    pg, pc, po = max(pg, g), max(pc, c), max(po, o)
+                    net_in = max(0, dg - dc)
+                    tbd[day] = {
+                        "input": net_in,
+                        "cached": dc,
+                        "output": do,
+                        "total": net_in + dc + do,
+                        "cost": calculate_cost(model_for_cost, net_in, do, dc)
+                    }
+                sess["tokens_by_day"] = tbd
         for s in codex_sessions.values():
             if not s.get("model") and s.get("_provider"):
                 s["model"] = s["_provider"]
             s.pop("_provider", None)
+            mcp = _mcp_usage_from_counts(s.get("tool_counts") or {})
+            if mcp:
+                s["mcp_usage"] = mcp
+            _sc = s.pop("_skill_counts", None)
+            if _sc:
+                s["skills_used"] = [{"name": k, "count": v}
+                                    for k, v in sorted(_sc.items(), key=lambda kv: (-kv[1], kv[0]))]
+        # Annotate parents of subagent threads (children are full sessions with
+        # their own usage — linkage only, never re-summed).
+        for s in codex_sessions.values():
+            pid = s.get("parent_session_id")
+            if pid and pid in codex_sessions:
+                codex_sessions[pid].setdefault("child_session_ids", []).append(s["id"])
+        for s in codex_sessions.values():
+            kids = s.get("child_session_ids") or []
+            if kids:
+                s["delegation"] = {"supported": True, "tokens_recorded": False,
+                                   "linked_children": len(kids)}
         sessions.extend(codex_sessions.values())
 
     # 3 & 7. Gemini & Antigravity
     gemini_projects_file = GEMINI_DIR / "projects.json"
     if gemini_projects_file.exists():
         try:
-            with open(gemini_projects_file, "r") as f:
+            with open(gemini_projects_file, "r", encoding="utf-8", errors="replace") as f:
                 pj_data = json.load(f).get("projects", {})
                 gemini_slugs = set(pj_data.values())
                 gemini_slug_to_path = {v: k for k, v in pj_data.items()}
@@ -1831,7 +2784,8 @@ def _scan_sessions_sync():
                         try:
                             _all_chat_sids.add(json.loads(_cf.read_text(encoding="utf-8", errors="replace")).get("sessionId") or "")
                         except Exception: pass
-            _all_log_sids: set = set()  # tracks log-only sessions added, prevents cross-dir duplication
+            _ag_surface = _antigravity_surface_map()  # session id → cli/ide/app, for sub-labels
+            _seen_antigravity: set = set()  # global dedup across chat + logs + brain; first discovery wins (ensures real token versions from tmp preferred over brain estimates; kills intra-tmp chat dupes for same sid)
 
             for tmp_dir in (GEMINI_DIR / "tmp").glob("*"):
                 if not tmp_dir.is_dir(): continue
@@ -1857,6 +2811,8 @@ def _scan_sessions_sync():
                                 ts = _aware(datetime.fromisoformat(data.get("lastUpdated").replace('Z', '+00:00'))) if data.get("lastUpdated") else _file_mtime_utc(cf)
                                 tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
                                 mcp_tools = []; has_plan = False; first_msg = ""; plans = []
+                                tool_counts: Dict[str, int] = {}
+                                skill_counts: Dict[str, int] = {}
                                 has_user = False
                                 for msg in data.get("messages", []):
                                     if msg.get("type") == "user":
@@ -1871,6 +2827,12 @@ def _scan_sessions_sync():
                                     if "toolCalls" in msg:
                                         for tc in msg["toolCalls"]:
                                             if tc.get("name") not in mcp_tools: mcp_tools.append(tc.get("name"))
+                                            _count_tool(tool_counts, tc.get("name"))
+                                            # Gemini's structured skill signal.
+                                            if tc.get("name") == "activate_skill":
+                                                _sk = (tc.get("args") or {}).get("name")
+                                                if _sk:
+                                                    skill_counts[_sk] = skill_counts.get(_sk, 0) + 1
                                             if tc.get("name") == "exit_plan_mode":
                                                 plan_text = ""
                                                 pp = (tc.get("args") or {}).get("plan_path")
@@ -1904,8 +2866,13 @@ def _scan_sessions_sync():
                                             elif af.suffix.lower() in (".png", ".webp", ".jpg", ".jpeg"): artifacts.append({"name": af.name, "path": str(af), "type": "image"})
                                 except Exception: pass
 
+                                # Antigravity/Gemini token records expose no cache-write field; nothing to pass.
                                 tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"])
-                                sessions.append({"id": sid, "agent": effective_agent, "project": project_path, "timestamp": ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "cost": tokens["cost"]})
+                                if sid in _seen_antigravity: continue
+                                _seen_antigravity.add(sid)
+                                _g_sess = {"id": sid, "agent": effective_agent, "project": project_path, "timestamp": ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "antigravity_source": _ag_surface.get(sid), "cost": tokens["cost"]}
+                                _attach_tool_usage(_g_sess, tool_counts, skill_counts)
+                                sessions.append(_g_sess)
                         except Exception: continue
                 # Scan logs.json for Antigravity sessions that have no chat JSON file
                 _logs_file = tmp_dir / "logs.json"
@@ -1922,7 +2889,7 @@ def _scan_sessions_sync():
                                 if _lsid not in _session_msgs: _session_msgs[_lsid] = []
                                 _session_msgs[_lsid].append(_le)
                         for _lsid, _msgs in _session_msgs.items():
-                            if not _msgs or _lsid in _all_log_sids: continue
+                            if not _msgs or _lsid in _seen_antigravity: continue
                             _first_msg = _msgs[0].get("message", "")
                             _last_ts_str = _session_last_ts.get(_lsid, "")
                             try: _lts = _aware(datetime.fromisoformat(_last_ts_str.replace('Z', '+00:00')))
@@ -1937,17 +2904,35 @@ def _scan_sessions_sync():
                                         _plans.append({"session_id": _lsid, "agent": "antigravity", "timestamp": _lts, "content": _pt})
                                     except Exception: pass
                             _tkns = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0}
-                            sessions.append({"id": _lsid, "agent": "antigravity", "project": project_path, "timestamp": _lts, "display": _first_msg[:100], "tokens": _tkns, "mcp_tools": [], "has_plan": _has_plan, "plans": _plans, "model": None, "artifacts": [], "cost": 0.0})
-                            _all_log_sids.add(_lsid)
+                            for _msg in _msgs:
+                                toks = len(_msg.get("message", "")) // 4
+                                msg_type = _msg.get("type", "")
+                                if msg_type in ("assistant", "model"):
+                                    _tkns["output"] += toks
+                                else:
+                                    _tkns["input"] += toks
+                            _tkns["total"] = _tkns["input"] + _tkns["output"]
+                            if _lsid in _seen_antigravity: continue
+                            _seen_antigravity.add(_lsid)
+                            sessions.append({"id": _lsid, "agent": "antigravity", "project": project_path, "timestamp": _lts, "display": _first_msg[:100], "tokens": _tkns, "mcp_tools": [], "has_plan": _has_plan, "plans": _plans, "model": None, "artifacts": [], "antigravity_source": _ag_surface.get(_lsid), "cost": 0.0})
                     except Exception: pass
         except Exception: pass
 
     # 3b. Antigravity brain/ folder — richer per-session artifacts (task/plan/walkthrough)
-    if ANTIGRAVITY_BRAIN_DIR.exists():
-        for sess_dir in ANTIGRAVITY_BRAIN_DIR.iterdir():
+    _seen_brain_sids: set = set()
+    # CLI (`agy`) ground truth: real model + exact project, keyed by session id.
+    _ag_cli_meta = _antigravity_cli_meta()
+    for _brain_dir in ANTIGRAVITY_BRAIN_DIRS:
+        if not _brain_dir.exists(): continue
+        for sess_dir in _brain_dir.iterdir():
             try:
                 if not sess_dir.is_dir(): continue
                 sid = sess_dir.name
+                # Dedup: a session may already be captured via the gemini-logs/chat path (real tokens),
+                # or appear under more than one brain surface. Skip those so we don't double-count.
+                # _seen_antigravity covers prior chat/logs + earlier brain sources; _seen_brain_sids
+                # handles overlaps within this brain SOURCES iteration.
+                if sid in _seen_antigravity or sid in _seen_brain_sids: continue
                 task = plan = walkthrough = ""
                 latest_ts = None
                 artifacts = []
@@ -2001,8 +2986,20 @@ def _scan_sessions_sync():
                                 artifacts.append({"name": f"frame {p.name}", "path": str(p), "type": "image"})
                 except Exception: pass
 
-                if not (task or plan or walkthrough or artifacts): continue
-                project = apply_alias(_antigravity_infer_project((task or "") + "\n" + (plan or "")))
+                # CLI sessions carry a transcript but often none of the IDE artifacts
+                # above, so also keep a session if its transcript yields token usage —
+                # otherwise it's an empty/aborted dir worth skipping. (computed once,
+                # reused in the append below.)
+                _ag_tokens = _estimate_antigravity_tokens(sess_dir)
+                if not (task or plan or walkthrough or artifacts or _ag_tokens.get("total", 0) > 0): continue
+                # Mark seen only now that we're actually appending — a content-less
+                # mirror dir must not block the dir that holds this session's content.
+                _seen_antigravity.add(sid)
+                _seen_brain_sids.add(sid)
+                # Prefer the CLI's own records (exact cwd from history.jsonl, real
+                # model from the SQLite trajectory); fall back to brain heuristics.
+                _cli = _ag_cli_meta.get(sid, {})
+                project = apply_alias(_cli.get("project") or _antigravity_infer_project((task or "") + "\n" + (plan or "")))
                 first_line = next((ln.strip() for ln in (task or plan or walkthrough).splitlines() if ln.strip() and not ln.strip().startswith("#")), "")
                 display = (first_line or "Antigravity session")[:100]
                 plans: List[dict] = []
@@ -2014,12 +3011,13 @@ def _scan_sessions_sync():
                     "project": project,
                     "timestamp": latest_ts or datetime.fromtimestamp(sess_dir.stat().st_mtime, tz=timezone.utc),
                     "display": display,
-                    "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0},
+                    "tokens": _ag_tokens,
                     "mcp_tools": [],
                     "has_plan": bool(plan),
                     "plans": plans,
-                    "model": "gemini (antigravity)",
+                    "model": _cli.get("model") or "gemini (antigravity)",
                     "artifacts": artifacts,
+                    "antigravity_source": _ag_surface.get(sid),
                     "cost": 0.0,
                 })
             except Exception: continue
@@ -2033,7 +3031,7 @@ def _scan_sessions_sync():
                         sid = cf.stem; mcp_tools = []; has_plan = False; first_msg = ""; plans = []
                         tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
                         project_path = "unknown"; last_ts = _file_mtime_utc(cf); model = None
-                        artifacts = []
+                        artifacts = []; tool_counts = {}; q_skill_counts = {}
                         with open(cf, "r", encoding="utf-8", errors="replace") as f:
                             for line in f:
                                 try:
@@ -2049,13 +3047,23 @@ def _scan_sessions_sync():
                                         usage = data.get("message", {}).get("usage", {})
                                         cr = usage.get("cache_read_input_tokens", 0) or 0
                                         cc = usage.get("cache_creation_input_tokens", 0) or 0
-                                        tokens["input"]  += (usage.get("input_tokens", 0) or 0) + cc
+                                        cc_1h = (usage.get("cache_creation", {}) or {}).get("ephemeral_1h_input_tokens", 0) or 0
+                                        tokens["input"]  += usage.get("input_tokens", 0) or 0
                                         tokens["output"] += usage.get("output_tokens", 0) or 0
                                         tokens["cached"] = max(tokens["cached"], cr)
                                         tokens["_cached_sum"] = tokens.get("_cached_sum", 0) + cr
+                                        # cache_creation (write) IS billed per event → cumulative, like input.
+                                        tokens["cache_creation"] = tokens.get("cache_creation", 0) + cc
+                                        tokens["cache_creation_1h"] = tokens.get("cache_creation_1h", 0) + cc_1h
                                         for item in data.get("message", {}).get("content", []):
                                             if item.get("type") == "tool_use":
                                                 if item.get("name") not in mcp_tools: mcp_tools.append(item.get("name"))
+                                                _count_tool(tool_counts, item.get("name"))
+                                                # qwen is a gemini fork; same structured skill signal.
+                                                if item.get("name") == "activate_skill":
+                                                    _sk = (item.get("input") or {}).get("name")
+                                                    if _sk:
+                                                        q_skill_counts[_sk] = q_skill_counts.get(_sk, 0) + 1
                                             if item.get("type") == "thinking":
                                                 t_text = item.get("thinking", "")
                                                 if "plan" in t_text.lower() and len(t_text) > 100:
@@ -2063,8 +3071,10 @@ def _scan_sessions_sync():
                                                     plans.append({"session_id": sid, "agent": "qwen", "timestamp": last_ts, "content": t_text})
                                 except Exception: continue
                         tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
-                        tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens.get("_cached_sum", tokens["cached"]))
-                        sessions.append({"id": sid, "agent": "qwen", "project": project_path, "timestamp": last_ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "cost": tokens["cost"]})
+                        tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"], cache_creation_tokens=tokens.get("cache_creation", 0), cache_creation_1h_tokens=tokens.get("cache_creation_1h", 0))
+                        _q_sess = {"id": sid, "agent": "qwen", "project": project_path, "timestamp": last_ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "cost": tokens["cost"]}
+                        _attach_tool_usage(_q_sess, tool_counts, q_skill_counts)
+                        sessions.append(_q_sess)
                     except Exception: continue
 
     # 5. Vibe
@@ -2080,6 +3090,7 @@ def _scan_sessions_sync():
                     mcp_tools = [t.get("function", {}).get("name") for t in meta.get("tools_available", []) if t.get("function", {}).get("name")]
                     model = meta.get("agent_config", {}).get("active_model")
                     project_path = apply_alias(meta.get("environment", {}).get("working_directory", "unknown"))
+                    # Vibe stats expose no cache-write field; nothing to pass.
                     tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"])
                     sessions.append({"id": sid, "agent": "vibe", "project": project_path, "timestamp": ts, "display": f"Vibe Session {sid[:8]}", "tokens": tokens, "mcp_tools": list(set(mcp_tools)), "has_plan": False, "plans": [], "model": model, "artifacts": [], "cost": tokens["cost"]})
             except Exception: continue
@@ -2090,7 +3101,7 @@ def _scan_sessions_sync():
         if CURSOR_STORAGE.exists():
             for ws in CURSOR_STORAGE.glob("*/workspace.json"):
                 try:
-                    with open(ws, "r") as f:
+                    with open(ws, "r", encoding="utf-8", errors="replace") as f:
                         data = json.load(f)
                         folder = data.get("folder")
                         if folder:
@@ -2130,6 +3141,7 @@ def _scan_sessions_sync():
                                 first_msg = ""
                                 tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
                                 mcp_tools = []
+                                tool_counts = {}
                                 subagents = []
                                 has_plan = False
                                 plans = []
@@ -2151,14 +3163,19 @@ def _scan_sessions_sync():
                                             usage = msg.get("usage", {}) if isinstance(msg.get("usage"), dict) else {}
                                             cr = usage.get("cache_read_input_tokens", 0) or 0
                                             cc = usage.get("cache_creation_input_tokens", 0) or 0
-                                            tokens["input"]  += (usage.get("input_tokens", 0) or 0) + cc
+                                            cc_1h = (usage.get("cache_creation", {}) or {}).get("ephemeral_1h_input_tokens", 0) or 0
+                                            tokens["input"]  += usage.get("input_tokens", 0) or 0
                                             tokens["output"] += usage.get("output_tokens", 0) or 0
                                             tokens["cached"] = max(tokens["cached"], cr)
                                             tokens["_cached_sum"] = tokens.get("_cached_sum", 0) + cr
+                                            # cache_creation (write) IS billed per event → cumulative, like input.
+                                            tokens["cache_creation"] = tokens.get("cache_creation", 0) + cc
+                                            tokens["cache_creation_1h"] = tokens.get("cache_creation_1h", 0) + cc_1h
                                             for item in msg.get("content", []) if isinstance(msg.get("content"), list) else []:
                                                 if item.get("type") == "tool_use":
                                                     name = item.get("name")
                                                     if name not in mcp_tools: mcp_tools.append(name)
+                                                    _count_tool(tool_counts, name)
                                                     if name == "Subagent":
                                                         sub_input = item.get("input") or {}
                                                         sub_name = sub_input.get("name") or sub_input.get("subagent_type")
@@ -2170,8 +3187,19 @@ def _scan_sessions_sync():
                                                         has_plan = True
                                                         plans.append({"session_id": sid, "agent": "cursor", "timestamp": mtime, "content": t_text})
                                 tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
-                                tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens.get("_cached_sum", tokens["cached"]))
-                                sessions.append({"id": sid, "agent": "cursor", "project": project_path, "timestamp": mtime, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "subagents": subagents, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "cost": tokens["cost"]})
+                                tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"], cache_creation_tokens=tokens.get("cache_creation", 0), cache_creation_1h_tokens=tokens.get("cache_creation_1h", 0))
+                                # Cursor writes subagent transcripts to <sid>/subagents/
+                                # but they carry NO usage fields (verified), so we can
+                                # only count spawns — never estimate their tokens.
+                                spawn_count = 0
+                                try:
+                                    spawn_count = sum(1 for _ in (trans_dir / "subagents").glob("*.jsonl"))
+                                except Exception: pass
+                                delegation = {"supported": True, "tokens_recorded": False,
+                                              "spawn_count": max(spawn_count, len(subagents))}
+                                _c_sess = {"id": sid, "agent": "cursor", "project": project_path, "timestamp": mtime, "display": first_msg[:100], "tokens": tokens, "mcp_tools": mcp_tools, "subagents": subagents, "has_plan": has_plan, "plans": plans, "model": model, "artifacts": artifacts, "cost": tokens["cost"], "delegation": delegation}
+                                _attach_tool_usage(_c_sess, tool_counts)
+                                sessions.append(_c_sess)
                             except Exception: continue
 
     # 7. Copilot
@@ -2181,7 +3209,7 @@ def _scan_sessions_sync():
                 workspace_json = ws_folder.parent / "workspace.json"
                 project_path = "unknown"
                 if workspace_json.exists():
-                    with open(workspace_json, "r") as f:
+                    with open(workspace_json, "r", encoding="utf-8", errors="replace") as f:
                         wj = json.load(f); folder_url = wj.get("folder")
                         if folder_url: project_path = unquote(folder_url.replace("file://", ""))
                 # VS Code ~1.100+ switched session files from <id>.json (single
@@ -2225,27 +3253,111 @@ def _scan_sessions_sync():
                             elif "response" in req:
                                 for part in req["response"]: tokens["output"] += part.get("tokens", 0) or 0
                         tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
+                        # Copilot (VS Code) chat records expose no cache-write field; nothing to pass.
                         tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"])
-                        sessions.append({"id": sid, "agent": "copilot", "project": project_path, "timestamp": last_ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": [], "has_plan": len(plans) > 0, "plans": plans, "model": model, "artifacts": [], "cost": tokens["cost"]})
+                        sessions.append({"id": sid, "agent": "copilot", "project": project_path, "timestamp": last_ts, "display": first_msg[:100], "tokens": tokens, "mcp_tools": [], "has_plan": len(plans) > 0, "plans": plans, "model": model, "artifacts": [], "copilot_source": "vscode", "cost": tokens["cost"]})
                     except Exception: continue
+            except Exception: continue
+
+    # 7b. GitHub Copilot CLI / agent — ~/.copilot/session-state/<id>/events.jsonl.
+    # A separate store from the VS Code Copilot chat sessions above; the CLI
+    # writes an append-only event log per session (#36). Token usage comes from
+    # session.shutdown.modelMetrics when the session has ended, otherwise we sum
+    # per-message outputTokens and estimate input from prompt length.
+    if COPILOT_CLI_DIR.exists():
+        for sess_dir in COPILOT_CLI_DIR.iterdir():
+            try:
+                if not sess_dir.is_dir(): continue
+                ev_file = sess_dir / "events.jsonl"
+                if not ev_file.exists(): continue
+                rows = _load_copilot_cli_events(ev_file)
+                if not rows: continue
+                sid = sess_dir.name
+                project_path = "unknown"; first_msg = ""; model = None
+                models_used: List[str] = []
+                out_tokens = 0; in_estimate = 0
+                start_ts = None; last_ts = None; shutdown_metrics = None
+                for r in rows:
+                    et = r.get("type"); d = r.get("data") or {}
+                    rts = _parse_copilot_iso(r.get("timestamp"))
+                    if rts and (last_ts is None or rts > last_ts): last_ts = rts
+                    if et == "session.start":
+                        cwd = (d.get("context") or {}).get("cwd")
+                        if cwd: project_path = cwd
+                        start_ts = _parse_copilot_iso(d.get("startTime")) or rts
+                    elif et == "user.message":
+                        c = d.get("content") or ""
+                        if c and not first_msg: first_msg = c
+                        in_estimate += len(c) // 4
+                    elif et == "assistant.message":
+                        m = d.get("model")
+                        if m:
+                            if not model: model = m
+                            if m not in models_used: models_used.append(m)
+                        ot = d.get("outputTokens")
+                        if isinstance(ot, (int, float)) and not isinstance(ot, bool):
+                            out_tokens += int(ot)
+                    elif et == "session.model_change":
+                        nm = d.get("newModel")
+                        if nm and nm not in models_used: models_used.append(nm)
+                    elif et == "session.shutdown":
+                        shutdown_metrics = d.get("modelMetrics")
+                tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
+                metr = _copilot_cli_tokens_from_metrics(shutdown_metrics)
+                if metr:
+                    tokens.update(metr)
+                else:
+                    tokens["input"] = in_estimate
+                    tokens["output"] = out_tokens
+                tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
+                # Copilot CLI modelMetrics has no distinct cache-write field; nothing to pass.
+                tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"])
+                if model and model not in models_used: models_used.insert(0, model)
+                ts = last_ts or start_ts or _file_mtime_utc(ev_file)
+                sessions.append({
+                    "id": sid, "agent": "copilot", "project": apply_alias(project_path),
+                    "timestamp": ts, "display": first_msg[:100], "tokens": tokens,
+                    "mcp_tools": [], "has_plan": False, "plans": [],
+                    "model": model, "models_used": models_used, "artifacts": [],
+                    "copilot_source": "cli", "cost": tokens["cost"],
+                })
             except Exception: continue
 
     # 8. OpenCode (SQLite: session / message / part)
     if OPENCODE_DB.exists():
         try:
             # immutable=1 so we don't block the live TUI process's write lock
-            uri = f"file:{OPENCODE_DB}?mode=ro"
+            uri = _sqlite_ro_uri(OPENCODE_DB)
             conn = sqlite3.connect(uri, uri=True, timeout=1.0)
             conn.row_factory = sqlite3.Row
             try:
-                rows = conn.execute("SELECT id, directory, title, time_created, time_updated FROM session").fetchall()
+                # Some OpenCode versions added a session-level `model` column
+                # (e.g. the github-copilot provider stores the model only there,
+                # not on assistant messages — see issue #39). Detect it so we can
+                # fall back to it, without breaking older schemas that lack it.
+                try:
+                    _sess_cols = {r[1] for r in conn.execute("PRAGMA table_info(session)")}
+                except Exception:
+                    _sess_cols = set()
+                _has_sess_model = "model" in _sess_cols
+                # parent_id links child (delegated) sessions to their parent. Children
+                # are full sessions already counted in aggregates, so hierarchy here is
+                # annotation-only — never re-summed (count-once invariant).
+                _has_parent = "parent_id" in _sess_cols
+                _parent_sel = ", parent_id" if _has_parent else ""
+                oc_by_id: Dict[str, Dict[str, Any]] = {}
+                oc_parent_of: Dict[str, str] = {}
+                rows = conn.execute(f"SELECT id, directory, title, time_created, time_updated{_parent_sel} FROM session").fetchall()
                 for srow in rows:
                     sid = srow["id"]
                     ts = datetime.fromtimestamp((srow["time_updated"] or srow["time_created"] or 0) / 1000, tz=timezone.utc)
                     tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
                     model = None
+                    provider_id = None   # OpenCode records the runtime (e.g. "ollama") → local detection
+                    models_used: List[str] = []   # distinct models, in first-seen order (#39)
                     first_user = ""
                     mcp_tools: List[str] = []
+                    oc_tool_counts: Dict[str, int] = {}
                     has_plan = False
                     plans: List[Dict[str, Any]] = []
                     # Model + tokens from assistant messages
@@ -2254,11 +3366,48 @@ def _scan_sessions_sync():
                             mdata = json.loads(mrow["data"] or "{}")
                         except Exception: continue
                         if mdata.get("role") == "assistant":
+                            if not provider_id:
+                                provider_id = mdata.get("providerID")
                             if not model:
-                                mi = mdata.get("model") or {}
-                                model = mi.get("modelID") or mi.get("providerID")
+                                model = mdata.get("modelID") or mdata.get("providerID")
+                                if not model:
+                                    mi = mdata.get("model")
+                                    if isinstance(mi, dict):
+                                        model = mi.get("modelID") or mi.get("providerID")
+                                    elif isinstance(mi, str):
+                                        model = mi
+                            # Track every distinct model used this session (sessions can
+                            # switch models mid-thread). Prefer the real model id over a
+                            # bare providerID so the list stays meaningful.
+                            _mm = mdata.get("modelID") or _opencode_resolve_model(mdata.get("model"))
+                            if _mm and _mm not in models_used:
+                                models_used.append(_mm)
                             if mdata.get("mode") == "plan":
                                 has_plan = True
+                    # Fallbacks for #39: some providers (e.g. github-copilot) carry
+                    # no model on assistant messages. Try the session-level `model`
+                    # column, then any message regardless of role.
+                    if not model and _has_sess_model:
+                        try:
+                            mrow = conn.execute("SELECT model FROM session WHERE id=?", (sid,)).fetchone()
+                            if mrow is not None:
+                                model = _opencode_resolve_model(mrow["model"])
+                        except Exception:
+                            pass
+                    if not model:
+                        for mrow in conn.execute("SELECT data FROM message WHERE session_id=? ORDER BY time_created", (sid,)):
+                            try:
+                                mdata = json.loads(mrow["data"] or "{}")
+                            except Exception:
+                                continue
+                            model = (_opencode_resolve_model(mdata.get("model"))
+                                     or mdata.get("modelID") or mdata.get("providerID"))
+                            if model:
+                                break
+                    # Keep the resolved primary model represented in the list (covers the
+                    # fallback cases where it came from session.model, not a message).
+                    if model and model not in models_used:
+                        models_used.insert(0, model)
                     # Parts: first user text, tool names, token totals from step-finish
                     for prow in conn.execute("SELECT data FROM part WHERE session_id=? ORDER BY time_created", (sid,)):
                         try:
@@ -2271,18 +3420,18 @@ def _scan_sessions_sync():
                         if ptype == "tool":
                             tname = pdata.get("tool")
                             if tname and tname not in mcp_tools: mcp_tools.append(tname)
+                            _count_tool(oc_tool_counts, tname)
                         if ptype == "step-finish":
                             tk = pdata.get("tokens") or {}
                             cache = tk.get("cache") or {}
                             cache_write = (cache.get("write", 0) or 0)
-                            # cache writes are billed at input rate (~1.25x on Anthropic, but
-                            # calculate_cost only exposes one cached-read parameter, so fold
-                            # writes into input as the closest available approximation).
-                            tokens["input"]  += (tk.get("input", 0) or 0) + cache_write
+                            tokens["input"]  += tk.get("input", 0) or 0
                             tokens["output"] += tk.get("output", 0) or 0
-                            tokens["cached"] += (cache.get("read", 0) or 0)
+                            tokens["cached"] = max(tokens["cached"], cache.get("read", 0) or 0)
+                            # cache writes ARE billed per event → cumulative; priced at 1.25x input.
+                            tokens["cache_creation"] = tokens.get("cache_creation", 0) + cache_write
                     tokens["total"] = tokens["input"] + tokens["output"] + tokens["cached"]
-                    tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"])
+                    tokens["cost"] = calculate_cost(model, tokens["input"], tokens["output"], tokens["cached"], cache_creation_tokens=tokens.get("cache_creation", 0), provider=provider_id)
                     project_path = srow["directory"] or "unknown"
                     title = srow["title"] or ""
                     display = (first_user or title)[:100]
@@ -2292,12 +3441,32 @@ def _scan_sessions_sync():
                         has_plan = True
                         plan_text = "\n".join(f"- [{r['status']}] {r['content']}" for r in todo_rows)
                         plans.append({"session_id": sid, "agent": "opencode", "timestamp": ts, "content": plan_text})
-                    sessions.append({
+                    oc_sess = {
                         "id": sid, "agent": "opencode", "project": apply_alias(srow["directory"] or "unknown"), "timestamp": ts,
                         "display": display, "tokens": tokens, "mcp_tools": mcp_tools,
-                        "has_plan": has_plan, "plans": plans, "model": model, "artifacts": [],
+                        "has_plan": has_plan, "plans": plans, "model": model,
+                        "models_used": models_used, "artifacts": [],
+                        "provider": provider_id,  # expose runtime (e.g. "ollama") so analytics can detect local sessions
                         "cost": tokens["cost"],
-                    })
+                    }
+                    if _has_parent and srow["parent_id"]:
+                        oc_sess["parent_session_id"] = srow["parent_id"]
+                        oc_parent_of[sid] = srow["parent_id"]
+                    _attach_tool_usage(oc_sess, oc_tool_counts)
+                    oc_by_id[sid] = oc_sess
+                    sessions.append(oc_sess)
+                # Annotate parents with their children (display-only; child tokens
+                # are already counted as their own sessions).
+                for child_id, parent_id in oc_parent_of.items():
+                    parent = oc_by_id.get(parent_id)
+                    if parent is None:
+                        continue
+                    parent.setdefault("child_session_ids", []).append(child_id)
+                for oc_sess in oc_by_id.values():
+                    kids = oc_sess.get("child_session_ids") or []
+                    if kids:
+                        oc_sess["delegation"] = {"supported": True, "tokens_recorded": False,
+                                                 "linked_children": len(kids)}
             finally:
                 conn.close()
         except Exception:
@@ -2308,17 +3477,23 @@ def _scan_sessions_sync():
 
     # 9. Hermes Agent (SQLite: sessions / messages, pre-aggregated tokens)
     hermes_cwd_map = _hermes_cwd_by_session() if _hermes_dbs() else {}
+    hermes_by_id: Dict[str, Dict[str, Any]] = {}
     for db_path in _hermes_dbs():
         try:
-            uri = f"file:{db_path}?mode=ro"
+            uri = _sqlite_ro_uri(db_path)
             conn = sqlite3.connect(uri, uri=True, timeout=1.0)
             conn.row_factory = sqlite3.Row
             try:
+                # billing_base_url is newer; older Hermes DBs may lack it. Select
+                # it only when present so the whole scan doesn't fail on legacy
+                # schemas (the outer try/except would otherwise drop all sessions).
+                _cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
+                _base_url_col = "billing_base_url" if "billing_base_url" in _cols else "NULL AS billing_base_url"
                 srows = conn.execute(
                     "SELECT id, source, model, parent_session_id, started_at, ended_at, "
                     "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
                     "reasoning_tokens, estimated_cost_usd, actual_cost_usd, title, "
-                    "billing_provider, end_reason "
+                    f"billing_provider, {_base_url_col}, end_reason "
                     "FROM sessions"
                 ).fetchall()
                 for srow in srows:
@@ -2328,20 +3503,46 @@ def _scan_sessions_sync():
                     in_t  = srow["input_tokens"] or 0
                     out_t = srow["output_tokens"] or 0
                     reas  = srow["reasoning_tokens"] or 0
-                    cached = (srow["cache_read_tokens"] or 0) + (srow["cache_write_tokens"] or 0)
+                    # Split cache read (cheap, ~0.1x input) from cache write (1.25x input).
+                    # Do NOT sum them: they bill at wildly different rates.
+                    cache_read  = srow["cache_read_tokens"] or 0
+                    cache_write = srow["cache_write_tokens"] or 0
+                    cached = cache_read
                     # Hermes does NOT price reasoning_tokens (verified). Keep them
                     # separate so we can surface MiMo-style silent-waste sessions.
                     tokens = {"input": in_t, "output": out_t, "cached": cached,
+                              "cache_creation": cache_write,
                               "reasoning": reas,
-                              "total": in_t + out_t + cached + reas}
+                              "total": in_t + out_t + cached + cache_write + reas}
                     # Anomaly: reasoning dominates output AND is non-trivial in absolute terms.
                     # Cf. MiMo thinking-mode silent-waste (Hermes issue #27325).
                     cost_anomaly = bool(reas > 5000 and reas > out_t)
                     model = srow["model"]
                     # Prefer Hermes's own cost (it knows exotic models we may not price)
                     cost = srow["actual_cost_usd"] if srow["actual_cost_usd"] is not None else srow["estimated_cost_usd"]
+                    # Bind before the branch: it's referenced unconditionally in the
+                    # session dict below, but only computed when cost must be derived.
+                    _measured_tps = None
                     if cost is None:
-                        cost = calculate_cost(model, in_t, out_t, cached, provider=srow["billing_provider"])
+                        # Only when TT has to compute the cost itself AND the session
+                        # is local do we parse the agent log for a MEASURED tok/s
+                        # (out/latency per call). This keeps the common path cheap —
+                        # most Hermes sessions carry their own cost and skip this.
+                        try:
+                            from power_config import is_local_session
+                            if is_local_session(model, srow["billing_base_url"], srow["billing_provider"]):
+                                _summ = _hermes_log_summary(sid).get("summary")
+                                if _summ and _summ.get("total_latency_s", 0) > 0 and out_t > 0:
+                                    _measured_tps = out_t / _summ["total_latency_s"]
+                        except Exception:
+                            _measured_tps = None
+                        cost = calculate_cost(
+                            model, in_t, out_t, cached,
+                            provider=srow["billing_provider"],
+                            cache_creation_tokens=cache_write,
+                            endpoint=srow["billing_base_url"],
+                            tok_per_sec=_measured_tps,
+                        )
                     tokens["cost"] = cost
                     # First user message → display fallback when title is empty
                     first_user = ""
@@ -2352,13 +3553,15 @@ def _scan_sessions_sync():
                     if fu:
                         first_user = fu["content"] or ""
                     display = (srow["title"] or first_user)[:100]
-                    # Distinct tool names used in this session
-                    mcp_tools = [r[0] for r in conn.execute(
-                        "SELECT DISTINCT tool_name FROM messages "
-                        "WHERE session_id=? AND tool_name IS NOT NULL AND tool_name != ''",
-                        (sid,)).fetchall()]
+                    # Tool names + call counts used in this session
+                    h_tool_counts = {r[0]: r[1] for r in conn.execute(
+                        "SELECT tool_name, COUNT(*) FROM messages "
+                        "WHERE session_id=? AND tool_name IS NOT NULL AND tool_name != '' "
+                        "GROUP BY tool_name",
+                        (sid,)).fetchall()}
+                    mcp_tools = list(h_tool_counts.keys())
                     cwd = hermes_cwd_map.get(sid)
-                    sessions.append({
+                    hermes_by_id[sid] = {
                         "id": sid, "agent": "hermes",
                         "project": apply_alias(cwd or "unknown"),
                         "project_inferred": cwd is not None,
@@ -2369,11 +3572,37 @@ def _scan_sessions_sync():
                         "cost_anomaly": cost_anomaly,
                         "parent_session_id": srow["parent_session_id"],
                         "end_reason": srow["end_reason"],
-                    })
+                        "provider": srow["billing_provider"],
+                        "endpoint": srow["billing_base_url"],
+                        "tok_per_sec": _measured_tps,
+                    }
+                    _attach_tool_usage(hermes_by_id[sid], h_tool_counts)
+                    sessions.append(hermes_by_id[sid])
             finally:
                 conn.close()
         except Exception:
             pass
+    # Hermes hierarchy: children carry parent_session_id (pre-aggregated tokens
+    # of their own, already in totals) — annotate parents, never re-sum.
+    for h_sess in hermes_by_id.values():
+        pid = h_sess.get("parent_session_id")
+        if pid and pid in hermes_by_id:
+            hermes_by_id[pid].setdefault("child_session_ids", []).append(h_sess["id"])
+    for h_sess in hermes_by_id.values():
+        kids = h_sess.get("child_session_ids") or []
+        if kids:
+            h_sess["delegation"] = {"supported": True, "tokens_recorded": False,
+                                    "linked_children": len(kids)}
+
+    # Antigravity subagent linkage (needs the full session list to pair ids).
+    _antigravity_link_subagents(sessions)
+
+    # Every session gets an explicit delegation marker: agents whose logs carry
+    # no spawn signal report supported=False (an honest "n/a", never a fake 0).
+    # Capability is per-agent — a claude session outside the parsed top-100 is
+    # still "supported", just not scanned yet.
+    for s in sessions:
+        s.setdefault("delegation", {"supported": s.get("agent") in _DELEGATION_CAPABLE_AGENTS})
 
     # Global sort by timestamp descending
     sessions.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -2460,25 +3689,56 @@ async def get_pricing():
     return {"updated": PRICING_UPDATED, "models": PRICING}
 
 
+@app.get("/remote-access")
+async def get_remote_access(request: Request):
+    """Connection info for the "connect a device" QR panel: the scan-to-open URL
+    (host + frontend port + bootstrap token) that bin/cli.js precomputed into
+    TT_REMOTE_CONNECT_URL. The token is a credential, so this is LOOPBACK-ONLY —
+    a remote device (even one holding the token) gets 403, so the token can never
+    be re-fetched over the network. Returns {enabled: false} when not exposed."""
+    from fastapi import HTTPException
+    client = request.client.host if request.client else None
+    if not _is_loopback(client):
+        raise HTTPException(status_code=403, detail="Not available remotely.")
+    url = os.environ.get("TT_REMOTE_CONNECT_URL", "").strip()
+    token = os.environ.get("TT_AUTH_TOKEN", "").strip()
+    if not url or not token:
+        return {"enabled": False}
+    return {"enabled": True, "url": url, "token": token}
+
+
 @app.get("/artifacts")
 async def get_artifact(path: str):
     """Stream a local artifact file securely."""
     from fastapi.responses import FileResponse
     p = Path(path)
-    # Security: only serve files from known agent directories
-    allowed = [CLAUDE_DIR, CODEX_DIR, GEMINI_DIR, QWEN_DIR, VIBE_DIR, CURSOR_DIR, VSCODE_BASE, CURSOR_BASE]
+    # Security: only serve files from known agent directories. We compare the
+    # *resolved* path (symlinks collapsed) against each resolved allow-root, so a
+    # symlink planted inside an allowed dir that points outside it is rejected.
+    # Antigravity's brain/CLI stores live under GEMINI_DIR already, but we list
+    # them explicitly so the allow-list survives any future narrowing of that
+    # root (and documents that those artifacts are intentionally served).
+    allowed = [CLAUDE_DIR, CODEX_DIR, GEMINI_DIR, QWEN_DIR, VIBE_DIR, CURSOR_DIR,
+               VSCODE_BASE, CURSOR_BASE, *ANTIGRAVITY_BRAIN_DIRS, ANTIGRAVITY_CLI_DIR]
+    try:
+        resolved = p.resolve()
+    except Exception:
+        resolved = None
     is_safe = False
-    for a in allowed:
-        try:
-            if p.resolve().is_relative_to(a.resolve()):
-                is_safe = True; break
-        except Exception: continue
+    if resolved is not None:
+        for a in allowed:
+            try:
+                if resolved.is_relative_to(a.resolve()):
+                    is_safe = True; break
+            except Exception: continue
 
-    if not is_safe or not p.exists() or not p.is_file():
+    if not is_safe or resolved is None or not resolved.exists() or not resolved.is_file():
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Unauthorized or not found")
 
-    return FileResponse(path)
+    # Serve the validated, resolved path (not the raw input) so the file we
+    # checked is exactly the file we return — closes any symlink-swap window.
+    return FileResponse(str(resolved))
 
 
 @app.get("/cache/status")
@@ -2648,8 +3908,25 @@ async def get_session_detail(session_id: str, agent: str):
         return events
 
     elif agent in ["gemini", "antigravity"]:
+        # Antigravity CLI (agy) sessions store the real per-step trajectory in
+        # conversations/<id>.db — far richer than the brain markdown. Prefer it.
+        if agent == "antigravity":
+            cli_db = ANTIGRAVITY_CLI_DIR / "conversations" / f"{session_id}.db"
+            if cli_db.exists():
+                cli_msgs = _antigravity_cli_trace(cli_db, session_id)
+                if cli_msgs:
+                    return {
+                        "sessionId": session_id,
+                        "projectHash": "",
+                        "kind": "antigravity_cli",
+                        "messages": cli_msgs,
+                    }
         # Antigravity brain-based session (has no .json file; synthesize from markdown artifacts)
         brain_dir = ANTIGRAVITY_BRAIN_DIR / session_id
+        for _bd in ANTIGRAVITY_BRAIN_DIRS:
+            if (_bd / session_id).is_dir():
+                brain_dir = _bd / session_id
+                break
         if agent == "antigravity" and brain_dir.is_dir():
             messages = []
             base_ts = None
@@ -2809,6 +4086,31 @@ async def get_session_detail(session_id: str, agent: str):
                 except Exception: continue
         return events
     elif agent == "copilot":
+        # GitHub Copilot CLI session (~/.copilot/session-state/<id>/events.jsonl)
+        # takes priority — its ids are dir-named UUIDs distinct from VS Code (#36).
+        cli_file = COPILOT_CLI_DIR / session_id / "events.jsonl"
+        if cli_file.exists():
+            events = []
+            for r in _load_copilot_cli_events(cli_file):
+                et = r.get("type"); d = r.get("data") or {}
+                _p = _parse_copilot_iso(r.get("timestamp"))
+                norm = int(_p.timestamp() * 1000) if _p else None
+                base = {"timestamp": norm, "normalized_timestamp": norm}
+                if et == "user.message":
+                    events.append({"type": "user", "payload": {"content": d.get("content", "")}, **base})
+                elif et == "assistant.message":
+                    rt = d.get("reasoningText") or ""
+                    if rt:
+                        events.append({"type": "assistant_thinking", "payload": {"text": rt}, **base})
+                    txt = d.get("content") or ""
+                    if txt:
+                        events.append({"type": "assistant", "payload": {"content": txt, "model": d.get("model")}, **base})
+                    for tr in (d.get("toolRequests") or []):
+                        events.append({"type": "tool_call", "payload": {
+                            "tool": tr.get("name"), "callID": tr.get("toolCallId"),
+                            "arguments": tr.get("arguments"),
+                        }, **base})
+            return events
         # VS Code ~1.100+ stores sessions as <id>.jsonl (delta log) instead of
         # <id>.json (single object); match both and reconstruct the .jsonl form.
         files = list(VSCODE_STORAGE.glob(f"**/chatSessions/{session_id}.json")) \
@@ -2830,7 +4132,7 @@ async def get_session_detail(session_id: str, agent: str):
         return events
     elif agent == "opencode":
         if not OPENCODE_DB.exists(): return {"error": "Not found"}
-        uri = f"file:{OPENCODE_DB}?mode=ro"
+        uri = _sqlite_ro_uri(OPENCODE_DB)
         conn = sqlite3.connect(uri, uri=True, timeout=1.0)
         conn.row_factory = sqlite3.Row
         try:
@@ -2872,7 +4174,7 @@ async def get_session_detail(session_id: str, agent: str):
     elif agent == "hermes":
         for db_path in _hermes_dbs():
             try:
-                uri = f"file:{db_path}?mode=ro"
+                uri = _sqlite_ro_uri(db_path)
                 conn = sqlite3.connect(uri, uri=True, timeout=1.0)
                 conn.row_factory = sqlite3.Row
                 try:
@@ -2951,12 +4253,228 @@ async def get_session_detail(session_id: str, agent: str):
     #             return events
     return {"error": "Invalid agent"}
 
+
+def _jsonl_events(path: Path) -> List[Dict[str, Any]]:
+    """Parse a transcript JSONL into the event list shape the trace UI expects
+    (same normalization as the claude branch of get_session_detail)."""
+    events: List[Dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                data = json.loads(line)
+            except Exception:
+                continue
+            if data.get("timestamp"):
+                try:
+                    ts = _aware(datetime.fromisoformat(data["timestamp"].replace('Z', '+00:00')))
+                    data["normalized_timestamp"] = ts.timestamp() * 1000
+                except Exception:
+                    pass
+            events.append(data)
+    return events
+
+
+_SUBAGENT_ID_RE = re.compile(r"^[\w.-]+$")
+
+
+@app.get("/sessions/{session_id}/subagents/{agent_id}/trace")
+async def session_subagent_trace(session_id: str, agent_id: str, agent: str):
+    """Raw trace of ONE subagent transcript, for the in-place drill-in viewer.
+
+    Only claude and cursor need this: their subagent transcripts are files
+    inside the parent's session dir, NOT sessions of their own (grok/codex/
+    opencode/hermes children are real sessions — fetch the normal detail
+    endpoint for those instead)."""
+    if not _SUBAGENT_ID_RE.match(agent_id or ""):
+        return {"error": "Invalid subagent id"}
+    if agent == "claude":
+        files = list(CLAUDE_DIR.glob(f"projects/**/{session_id}.jsonl"))
+        if not files:
+            return {"error": "Not found"}
+        t = files[0].parent / session_id / "subagents" / f"agent-{agent_id}.jsonl"
+        if not t.exists():
+            return {"error": "Not found"}
+        return _jsonl_events(t)
+    if agent == "cursor":
+        for pd in (CURSOR_DIR / "projects").glob("*"):
+            t = pd / "agent-transcripts" / session_id / "subagents" / f"{agent_id}.jsonl"
+            if t.exists():
+                return _jsonl_events(t)
+        return {"error": "Not found"}
+    return {"error": "Invalid agent"}
+
+
+@app.get("/sessions/{session_id}/delegation")
+async def session_delegation(session_id: str, agent: str):
+    """Per-session subagent/delegation breakdown (overlay, like hermes-overlay).
+
+    claude: full per-subagent usage + cost from <sid>/subagents/agent-*.jsonl.
+    cursor: spawn count only — its subagent transcripts carry no usage fields.
+    opencode/hermes: parent/child session linkage from their SQLite hierarchies.
+    Everything else: {"supported": False} — the agent's logs don't record spawns.
+    """
+    if agent == "claude":
+        files = list(CLAUDE_DIR.glob(f"projects/**/{session_id}.jsonl"))
+        if not files:
+            return {"error": "Not found"}
+        deleg = _claude_subagent_usage(files[0], session_id)
+        if not deleg:
+            return {"supported": True, "tokens_recorded": True, "spawn_count": 0,
+                    "subagents": [], "totals": None, "cost": 0.0}
+        return {"supported": True, "tokens_recorded": True, **deleg}
+
+    if agent == "cursor":
+        for pd in (CURSOR_DIR / "projects").glob("*"):
+            trans_dir = pd / "agent-transcripts" / session_id
+            if trans_dir.is_dir():
+                sub_files = sorted((trans_dir / "subagents").glob("*.jsonl")) if (trans_dir / "subagents").is_dir() else []
+                return {"supported": True, "tokens_recorded": False,
+                        "spawn_count": len(sub_files),
+                        "subagents": [{"agent_id": f.stem, "agent_type": "unknown",
+                                       "tokens": None, "cost": None} for f in sub_files]}
+        return {"error": "Not found"}
+
+    if agent == "opencode":
+        if not OPENCODE_DB.exists():
+            return {"error": "Not found"}
+        try:
+            conn = sqlite3.connect(_sqlite_ro_uri(OPENCODE_DB), uri=True, timeout=1.0)
+            try:
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(session)")}
+                if "parent_id" not in cols:
+                    return {"supported": False}
+                row = conn.execute("SELECT parent_id FROM session WHERE id=?", (session_id,)).fetchone()
+                if row is None:
+                    return {"error": "Not found"}
+                children = [r[0] for r in conn.execute(
+                    "SELECT id FROM session WHERE parent_id=?", (session_id,))]
+                return {"supported": True, "tokens_recorded": False,
+                        "parent_session_id": row[0],
+                        "child_session_ids": children,
+                        "linked_children": len(children)}
+            finally:
+                conn.close()
+        except Exception:
+            return {"error": "Not found"}
+
+    if agent == "hermes":
+        for db_path in _hermes_dbs():
+            try:
+                conn = sqlite3.connect(_sqlite_ro_uri(db_path), uri=True, timeout=1.0)
+                try:
+                    row = conn.execute("SELECT parent_session_id FROM sessions WHERE id=?", (session_id,)).fetchone()
+                    if row is None:
+                        continue
+                    children = [r[0] for r in conn.execute(
+                        "SELECT id FROM sessions WHERE parent_session_id=?", (session_id,))]
+                    return {"supported": True, "tokens_recorded": False,
+                            "parent_session_id": row[0],
+                            "child_session_ids": children,
+                            "linked_children": len(children)}
+                finally:
+                    conn.close()
+            except Exception:
+                continue
+        return {"error": "Not found"}
+
+    if agent == "grok":
+        for bucket in GROK_SESSIONS_DIR.glob("*"):
+            sess_dir = bucket / session_id
+            if not (sess_dir.is_dir() and (sess_dir / GROK_SUMMARY).exists()):
+                continue
+            spawns = _grok_subagent_meta(sess_dir)
+            # Parent linkage: the parent's spawn meta names this session as child.
+            parent_id = None
+            try:
+                for other in bucket.iterdir():
+                    if not other.is_dir() or other.name == session_id:
+                        continue
+                    for m in _grok_subagent_meta(other):
+                        if m.get("child_session_id") == session_id:
+                            parent_id = other.name
+                            break
+                    if parent_id:
+                        break
+            except Exception:
+                pass
+            return {"supported": True, "tokens_recorded": False,
+                    "spawn_count": len(spawns), "subagents": spawns,
+                    "parent_session_id": parent_id,
+                    "child_session_ids": [m["child_session_id"] for m in spawns
+                                          if m.get("child_session_id")],
+                    "linked_children": len(spawns)}
+        return {"error": "Not found"}
+
+    if agent == "codex":
+        def _spawn_meta(path):
+            """(payload, thread_spawn) from a rollout's session_meta first line."""
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    first = json.loads(f.readline())
+            except Exception:
+                return None, None
+            p = first.get("payload") or {}
+            src = p.get("source")
+            spawn = (src.get("subagent") or {}).get("thread_spawn") if isinstance(src, dict) else None
+            if spawn is None and p.get("thread_source") == "subagent":
+                spawn = {}
+            return p, spawn
+
+        own = list(CODEX_DIR.glob(f"sessions/**/rollout-*{session_id}*.jsonl"))
+        if not own:
+            return {"error": "Not found"}
+        payload, spawn = _spawn_meta(own[0])
+        parent_id = None
+        info = None
+        if spawn is not None:
+            parent_id = spawn.get("parent_thread_id") or (payload or {}).get("forked_from_id")
+            info = {"role": spawn.get("agent_role") or (payload or {}).get("agent_role"),
+                    "nickname": spawn.get("agent_nickname") or (payload or {}).get("agent_nickname"),
+                    "depth": spawn.get("depth")}
+        children = []
+        try:
+            for f in (CODEX_DIR / "sessions").rglob("rollout-*.jsonl"):
+                if session_id in f.name:
+                    continue
+                p, sp = _spawn_meta(f)
+                if sp is None:
+                    continue
+                pid = sp.get("parent_thread_id") or (p or {}).get("forked_from_id")
+                if pid != session_id:
+                    continue
+                parts = f.stem.split("-")
+                children.append({
+                    "child_session_id": "-".join(parts[-5:]) if len(parts) >= 6 else f.stem,
+                    "agent_role": sp.get("agent_role") or (p or {}).get("agent_role"),
+                    "nickname": sp.get("agent_nickname") or (p or {}).get("agent_nickname"),
+                })
+        except Exception:
+            pass
+        return {"supported": True, "tokens_recorded": False,
+                "parent_session_id": parent_id, "subagent_info": info,
+                "subagents": children,
+                "child_session_ids": [c["child_session_id"] for c in children],
+                "linked_children": len(children)}
+
+    if agent == "antigravity":
+        kids = _antigravity_subagent_children(session_id)
+        return {"supported": True, "tokens_recorded": False,
+                "child_session_ids": kids, "linked_children": len(kids)}
+
+    return {"supported": False}
+
+
 @app.get("/projects")
 async def get_projects(include_hidden: bool = False):
     sessions = await get_sessions_cached(); projects = {}
     hidden = load_hidden()
     for s in sessions:
         proj = s["project"]
+        # The Antigravity "unassigned" sentinel isn't a real workspace — skip it
+        # so it never shows as a project card. These sessions remain visible in
+        # the dashboard and session lists, just not grouped as a project.
+        if proj == ANTIGRAVITY_UNASSIGNED:
+            continue
         if proj not in projects:
             # Basename that handles both POSIX (/) and Windows (\) separators
             proj_name = (os.path.basename((proj or "").replace("\\", "/").rstrip("/")) or proj or "unknown").strip()
@@ -3036,6 +4554,217 @@ async def post_unhide(payload: PathPayload):
     updated = unhide_project(payload.path)
     _invalidate_sessions_cache()
     return {"ok": True, "hidden": sorted(updated)}
+
+
+@app.get("/config/update-check")
+async def get_update_check():
+    """Current update-check state for the Settings toggle.
+
+    `enabled` is the saved preference; `env_forced_off` is true when
+    TT_NO_UPDATE_CHECK is set, in which case the toggle is read-only (ops/policy
+    override). `effective` is what actually happens (env wins)."""
+    pref = bool(load_preferences().get("update_check", True))
+    env_off = bool(os.environ.get("TT_NO_UPDATE_CHECK"))
+    return {"enabled": pref, "env_forced_off": env_off, "effective": pref and not env_off}
+
+
+@app.post("/config/update-check")
+async def post_update_check(payload: dict = Body(...)):
+    """Persist the update-check preference. Body: {"enabled": bool}."""
+    from fastapi import HTTPException
+    enabled = payload.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="'enabled' must be a boolean")
+    save_preferences({"update_check": enabled})
+    env_off = bool(os.environ.get("TT_NO_UPDATE_CHECK"))
+    return {"enabled": enabled, "env_forced_off": env_off, "effective": enabled and not env_off}
+
+
+@app.get("/config/power")
+async def get_power_config():
+    """Power & subscription cost config for local/subscription models.
+
+    `configured` tells the UI whether a power.json exists yet — when false the
+    returned values are the shipped defaults and the local-model electricity
+    branch is inactive until the user saves. `deviceDefault` is the chip-aware
+    wattage detected for this machine (e.g. Apple M5 → 22 W); it's the baseline
+    `loadWatts` falls back to when the user hasn't set one, so the UI can show
+    "default for your machine" instead of a generic number.
+    """
+    from power_config import load_power_config, has_user_config, device_default
+    cfg = load_power_config()
+    return {**cfg, "configured": has_user_config(), "deviceDefault": device_default()}
+
+
+@app.put("/config/power")
+async def put_power_config(payload: dict = Body(...)):
+    """Persist power config. Body: {loadWatts?, costPerKwh?, subscriptionEndpoints?}.
+
+    Validation happens in power_config.save_power_config (bad values are skipped,
+    never surfaced as raw errors). Returns the full saved config.
+    """
+    from fastapi import HTTPException
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    from power_config import save_power_config
+    try:
+        cfg = save_power_config(payload)
+    except OSError:
+        # Disk/permissions issue — keep it human, no stack traces.
+        raise HTTPException(status_code=500, detail="Could not save power config to disk.")
+    _invalidate_sessions_cache()
+    return {**cfg, "configured": True}
+
+
+@app.get("/config/power/meter")
+async def get_power_meter():
+    """What real power measurement is possible here, plus a live reading if any.
+
+    `capability` explains the platform situation to the UI (e.g. Apple Silicon on
+    AC needs admin). `reading` is a real watts value when a root-free source
+    exists (nvidia-smi / on-battery macOS), else null.
+    """
+    from power_meter import capability, read_power_watts
+    return {"capability": capability(), "reading": read_power_watts()}
+
+
+@app.post("/config/power/calibrate")
+async def calibrate_power():
+    """Sample real power for a few seconds and return it as a SUGGESTION.
+
+    Does NOT persist — the UI fills the loadWatts field with the value for the
+    user to review and Save. When no root-free *measurement* is available (e.g.
+    Apple Silicon on AC) we fall back to a chip-aware *estimate* so the field
+    still gets a sensible starting value: `{measured: null, estimated: <watts>,
+    source, detail, reason}`. When nothing is derivable, `estimated` is null too.
+    """
+    from power_meter import sample_average_watts, capability, estimated_watts
+    sample = sample_average_watts(duration_s=4.0, interval_s=1.0)
+    if not sample:
+        est = estimated_watts()
+        return {
+            "measured": None,
+            "estimated": est["watts"] if est else None,
+            "source": est["source"] if est else None,
+            "detail": est.get("detail") if est else None,
+            "reason": capability().get("reason"),
+        }
+    return {
+        "measured": sample["watts"], "source": sample["source"],
+        "samples": sample.get("samples"),
+    }
+
+
+@app.get("/config/billing")
+async def get_billing_config():
+    """Per-agent billing mode (how to frame the cost figure for each agent).
+
+    Returns one entry per *detected* agent with its resolved `mode`
+    (subscription | api | local | unknown), the `source` of that value
+    (user | detected | default), the raw auto-`detected` value (or null), the
+    static `default`, and a human `detect_source` note. The cost math is
+    unchanged by this — it only drives the UI's label/disclaimer.
+    """
+    from billing_mode import get_all, MODES
+    agents = _list_available_agents()
+    return {"agents": get_all(agents), "modes": list(MODES)}
+
+
+@app.put("/config/billing")
+async def put_billing_config(payload: dict = Body(...)):
+    """Set or clear one agent's billing-mode override.
+
+    Body: {"agent": "<agent>", "mode": "<mode>" | null}. A null/absent mode
+    clears the override and reverts the agent to auto-detection. Invalid input is
+    rejected with a plain message (no raw errors).
+    """
+    from fastapi import HTTPException
+    from billing_mode import save_override, get_all, MODES
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    agent = payload.get("agent")
+    if not isinstance(agent, str) or not agent.strip():
+        raise HTTPException(status_code=400, detail="'agent' is required")
+    mode = payload.get("mode")
+    if mode is not None and mode not in MODES:
+        raise HTTPException(status_code=400, detail=f"'mode' must be one of {list(MODES)} or null")
+    try:
+        save_override(agent.strip(), mode)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Could not save billing config to disk.")
+    _invalidate_sessions_cache()
+    return {"agents": get_all(_list_available_agents()), "modes": list(MODES)}
+
+
+@app.get("/config/billing-route")
+async def get_billing_route_config():
+    """Drain-priority billing routes per agent: which credit *bucket* pays, and
+    in what order, split by task type (interactive vs programmatic).
+
+    For each detected agent this returns the full ordered bucket list plus the
+    resolved `routes.{interactive,programmatic}` (active bucket, marginal-cost
+    flag, and whether the active bucket is a capped pool to warn on). The agent's
+    resolved billing `mode` is threaded in so a user-marked `local` agent routes
+    to the electricity bucket, and each agent's persisted *plan* (set via PUT)
+    sizes its pools — plan vocabularies are per-provider, so there is no global
+    plan knob. Date-gated policies (Anthropic's June-15 SDK split) flip on the
+    real clock. This drives the Settings drain-order view; it does not change
+    cost math on its own. `as_of` is when the provider snapshot was last
+    verified — the UI shows it as a staleness disclaimer.
+    """
+    from billing_mode import get_all
+    from billing_route import (
+        get_route_overview, load_plans, TASK_TYPES, CHARGES,
+        DEFAULT_PLAN, SNAPSHOT_AS_OF,
+    )
+    agents = _list_available_agents()
+    modes = get_all(agents)
+    plans = load_plans()
+    overview = {
+        a: get_route_overview(
+            a,
+            plan=plans.get(a, DEFAULT_PLAN),
+            mode=modes.get(a, {}).get("mode"),
+        )
+        for a in agents
+    }
+    return {
+        "agents": overview,
+        "task_types": list(TASK_TYPES),
+        "charges": list(CHARGES),
+        "as_of": SNAPSHOT_AS_OF,
+    }
+
+
+@app.put("/config/billing-route")
+async def put_billing_route_config(payload: dict = Body(...)):
+    """Set or clear one agent's plan tier (sizes its credit pools).
+
+    Body: {"agent": "<agent>", "plan": "<plan>" | null}. A null/absent plan
+    clears the choice and reverts the agent to its provider's default tier.
+    Plans are validated against that agent's own vocabulary (e.g. "max5x" is
+    Anthropic-only). Invalid input is rejected with a plain message.
+    """
+    from fastapi import HTTPException
+    from billing_route import save_plan, AGENT_PLANS
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    agent = payload.get("agent")
+    if not isinstance(agent, str) or not agent.strip():
+        raise HTTPException(status_code=400, detail="'agent' is required")
+    agent = agent.strip()
+    plan = payload.get("plan")
+    valid = AGENT_PLANS.get(agent, ())
+    if plan is not None and plan not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'plan' for {agent} must be one of {list(valid)} or null",
+        )
+    try:
+        save_plan(agent, plan)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Could not save plan to disk.")
+    return await get_billing_route_config()
 
 
 @app.get("/config/aliases")
@@ -3308,40 +5037,59 @@ def _cache_hit_pct(input_tokens: int, cached_tokens: int) -> Optional[float]:
 
 @app.get("/analytics")
 async def get_analytics():
+    from power_config import (
+        is_local_session, load_power_config, default_tok_per_sec_for_model, co2_for_session,
+    )
+    from insights import energy_wh, cloud_equiv_cost, savings_vs_cloud
+    pc = load_power_config()
+    load_watts = pc.get("loadWatts", 80)
+    ref_model = pc.get("referenceCloudModel", "claude-sonnet-4-6")
     sessions = await get_sessions_cached(); by_agent = {}; by_day = {}; by_model = {}
-    # quality_by_agent: Dict[str, Dict[str, int]] = {}
-    # total_edit_turns = 0
-    # total_retry_turns = 0
-    # total_measured_sessions = 0
     for s in sessions:
         agent = s["agent"]
-        if agent not in by_agent: by_agent[agent] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "session_count": 0}
+        if agent not in by_agent:
+            by_agent[agent] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0,
+                               "energy_wh": 0.0, "savings_usd": 0.0, "co2_g": 0.0, "session_count": 0}
         st = s.get("tokens", {})
         scost = s.get("cost", 0.0)
+        # Local insights — energy, cloud savings, CO2 — only for local sessions.
+        energy = savings = co2 = 0.0
+        if is_local_session(model_name=s.get("model"), endpoint=s.get("endpoint"),
+                            provider=s.get("provider"), billing_mode=s.get("billing_mode"), config=pc):
+            tps = s.get("tok_per_sec")
+            if not tps or tps <= 0:
+                tps = default_tok_per_sec_for_model(s.get("model"))
+            energy = energy_wh(st.get("output", 0), load_watts=load_watts, tok_per_sec=tps)
+            cloud_cost = cloud_equiv_cost(ref_model, st.get("input", 0), st.get("output", 0), st.get("cached", 0))
+            savings = savings_vs_cloud(scost, cloud_cost)
+            co2 = co2_for_session(st.get("output", 0), config=pc, tok_per_sec=tps)
         for k in ["input", "output", "cached", "total"]: by_agent[agent][k] += st.get(k, 0)
         by_agent[agent]["cost"] += scost
+        by_agent[agent]["energy_wh"] += energy
+        by_agent[agent]["savings_usd"] += savings
+        by_agent[agent]["co2_g"] += co2
         by_agent[agent]["session_count"] += 1
         model_name = s.get("model") or f"{agent} (unknown)"
         if model_name not in by_model:
-            by_model[model_name] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0, "session_count": 0, "agent": agent}
+            by_model[model_name] = {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0,
+                                    "energy_wh": 0.0, "savings_usd": 0.0, "co2_g": 0.0,
+                                    "session_count": 0, "agent": agent}
         for k in ["input", "output", "cached", "total"]: by_model[model_name][k] += st.get(k, 0)
         by_model[model_name]["cost"] += scost
+        by_model[model_name]["energy_wh"] += energy
+        by_model[model_name]["savings_usd"] += savings
+        by_model[model_name]["co2_g"] += co2
         by_model[model_name]["session_count"] += 1
-        # Bucket by LOCAL day, not UTC — a 9pm-PT session shouldn't land on the
-        # next day just because the timestamp crossed midnight UTC.
+        # Bucket by LOCAL day, not UTC.
         day = s["timestamp"].astimezone().strftime("%Y-%m-%d")
-        if day not in by_day: by_day[day] = {"total": 0, "input": 0, "output": 0, "cached": 0, "cost": 0.0}
+        if day not in by_day:
+            by_day[day] = {"total": 0, "input": 0, "output": 0, "cached": 0, "cost": 0.0,
+                           "energy_wh": 0.0, "savings_usd": 0.0, "co2_g": 0.0}
         for k in ["input", "output", "cached", "total"]: by_day[day][k] += st.get(k, 0)
         by_day[day]["cost"] += scost
-        # q = s.get("quality") or {}
-        # if q.get("measured"):
-        #     agg = quality_by_agent.setdefault(agent, {"edit_turns": 0, "retry_turns": 0, "measured_sessions": 0})
-        #     agg["edit_turns"] += q.get("edit_turns", 0)
-        #     agg["retry_turns"] += q.get("retry_turns", 0)
-        #     agg["measured_sessions"] += 1
-        #     total_edit_turns += q.get("edit_turns", 0)
-        #     total_retry_turns += q.get("retry_turns", 0)
-        #     total_measured_sessions += 1
+        by_day[day]["energy_wh"] += energy
+        by_day[day]["savings_usd"] += savings
+        by_day[day]["co2_g"] += co2
     for agent, row in by_agent.items():
         row["cache_hit_pct"] = _cache_hit_pct(row["input"], row["cached"])
         # agg = quality_by_agent.get(agent)
@@ -3353,18 +5101,130 @@ async def get_analytics():
     total_input = sum(a["input"] for a in by_agent.values())
     total_output = sum(a["output"] for a in by_agent.values())
     total_cached = sum(a["cached"] for a in by_agent.values())
+
+    # Ecosystem usage: skills, MCP servers, subagent types. New keys only — the
+    # existing by_agent/by_day/by_model/total stay byte-identical (no silent
+    # historical changes). Delegated usage is exposed as its OWN bucket, never
+    # folded into the per-agent sums: claude subagent transcripts aren't
+    # sessions (counted nowhere else), while opencode/hermes children already
+    # appear as sessions above — adding parent-side sums would double-count.
+    by_skill: Dict[str, Dict[str, Any]] = {}
+    by_mcp_server: Dict[str, Dict[str, Any]] = {}
+    by_subagent_type: Dict[str, Dict[str, Any]] = {}
+    # delegated_*: usage that exists NOWHERE else (claude subagent transcripts).
+    # linked_child_*: child sessions spawned by a parent — their tokens are
+    # already in by_agent/by_day/total above; surfaced here as an attribution
+    # view, never added on top.
+    delegation_totals: Dict[str, Any] = {
+        "delegated_tokens": 0, "delegated_cost": 0.0,
+        "sessions_with_spawns": 0,
+        "linked_children": 0, "linked_child_tokens": 0, "linked_child_cost": 0.0,
+        "by_agent": {},
+    }
+    # Child sessions are looked up per (agent, id) so grok by_type rows can
+    # attribute each child's tokens to its subagent type.
+    sess_by_key = {(s.get("agent"), s.get("id")): s for s in sessions}
+
+    def _subagent_row(t: str) -> Dict[str, Any]:
+        return by_subagent_type.setdefault(t, {
+            "spawns": 0, "tokens": 0, "cost": 0.0, "session_count": 0,
+            "tokens_recorded": False, "agents": []})
+
+    def _deleg_agent_row(agent: str) -> Dict[str, Any]:
+        return delegation_totals["by_agent"].setdefault(agent, {
+            "parents": 0, "spawns": 0, "children": 0,
+            "child_tokens": 0, "child_cost": 0.0,
+            "delegated_tokens": 0, "delegated_cost": 0.0})
+
+    for s in sessions:
+        agent = s.get("agent")
+        for sk in s.get("skills_used") or []:
+            row = by_skill.setdefault(sk["name"], {"invocations": 0, "session_count": 0, "agents": []})
+            row["invocations"] += sk["count"]
+            row["session_count"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+        for server, tools in (s.get("mcp_usage") or {}).items():
+            row = by_mcp_server.setdefault(server, {"calls": 0, "tools": {}, "session_count": 0, "agents": []})
+            row["session_count"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+            for tool, n in tools.items():
+                row["calls"] += n
+                row["tools"][tool] = row["tools"].get(tool, 0) + n
+
+        deleg = s.get("delegation") or {}
+        spawns_here = deleg.get("spawn_count") or deleg.get("linked_children") or 0
+        if spawns_here:
+            delegation_totals["sessions_with_spawns"] += 1
+            arow = _deleg_agent_row(agent)
+            arow["parents"] += 1
+            arow["spawns"] += spawns_here
+        for t, d in (deleg.get("by_type") or {}).items():
+            row = _subagent_row(t)
+            row["spawns"] += d.get("count", 0)
+            row["session_count"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+            # claude: per-type totals come straight from subagent transcripts.
+            if d.get("total") or d.get("cost"):
+                row["tokens"] += d.get("total", 0)
+                row["cost"] = round(row["cost"] + (d.get("cost") or 0), 6)
+                row["tokens_recorded"] = True
+            # grok: attribute each child SESSION's tokens to the spawning type.
+            for cid in d.get("child_session_ids") or []:
+                child = sess_by_key.get((agent, cid))
+                if child is None:
+                    continue
+                row["tokens"] += (child.get("tokens") or {}).get("total", 0)
+                row["cost"] = round(row["cost"] + (child.get("cost") or 0), 6)
+                row["tokens_recorded"] = True
+        # codex children carry their role; attribute the child session directly.
+        si = s.get("subagent_info")
+        if s.get("parent_session_id") and isinstance(si, dict) and si.get("role"):
+            row = _subagent_row(si["role"])
+            row["spawns"] += 1
+            if agent not in row["agents"]:
+                row["agents"].append(agent)
+            row["tokens"] += (s.get("tokens") or {}).get("total", 0)
+            row["cost"] = round(row["cost"] + (s.get("cost") or 0), 6)
+            row["tokens_recorded"] = True
+
+        if deleg.get("tokens_recorded") and deleg.get("delegated_total"):
+            delegation_totals["delegated_tokens"] += deleg["delegated_total"]
+            delegation_totals["delegated_cost"] = round(
+                delegation_totals["delegated_cost"] + (s.get("delegated_cost") or 0), 6)
+            arow = _deleg_agent_row(agent)
+            arow["delegated_tokens"] += deleg["delegated_total"]
+            arow["delegated_cost"] = round(arow["delegated_cost"] + (s.get("delegated_cost") or 0), 6)
+        if s.get("parent_session_id"):
+            delegation_totals["linked_children"] += 1
+            delegation_totals["linked_child_tokens"] += (s.get("tokens") or {}).get("total", 0)
+            delegation_totals["linked_child_cost"] = round(
+                delegation_totals["linked_child_cost"] + (s.get("cost") or 0), 6)
+            arow = _deleg_agent_row(agent)
+            arow["children"] += 1
+            arow["child_tokens"] += (s.get("tokens") or {}).get("total", 0)
+            arow["child_cost"] = round(arow["child_cost"] + (s.get("cost") or 0), 6)
+
     return {
         "by_agent": by_agent,
         "by_day": sorted_days,
         "by_model": by_model,
+        "by_skill": by_skill,
+        "by_mcp_server": by_mcp_server,
+        "by_subagent_type": by_subagent_type,
+        "delegation": delegation_totals,
         "total": {
             "input": total_input,
             "output": total_output,
             "cached": total_cached,
             "total": sum(a["total"] for a in by_agent.values()),
             "cost": sum(a["cost"] for a in by_agent.values()),
+            "energy_wh": sum(a["energy_wh"] for a in by_agent.values()),
+            "savings_usd": sum(a["savings_usd"] for a in by_agent.values()),
+            "co2_g": sum(a["co2_g"] for a in by_agent.values()),
             "cache_hit_pct": _cache_hit_pct(total_input, total_cached),
-            # "quality": _quality_summary(total_edit_turns, total_retry_turns, total_measured_sessions),
         },
         "pricing_updated": PRICING_UPDATED,
     }
@@ -3774,6 +5634,35 @@ def _collect_all_plugins(project: Optional[Path]) -> List[dict]:
         seen.add(key); deduped.append(p)
     return deduped
 
+def _project_safe_roots() -> List[Path]:
+    """Directories a `?project=` path is allowed to resolve inside.
+
+    Defaults to the user's home (where agents and their per-project config
+    live in practice). Power users whose code lives elsewhere (external
+    volumes, /opt, …) can extend this via TT_PROJECT_ROOTS — an os-pathsep
+    separated list of additional roots.
+    """
+    roots = [HOME]
+    extra = os.environ.get("TT_PROJECT_ROOTS")
+    if extra:
+        roots += [Path(p).expanduser() for p in extra.split(os.pathsep) if p.strip()]
+    return roots
+
+
+def _project_within_safe_roots(project: str) -> bool:
+    """True iff `project` resolves inside an allowed root (#54).
+
+    Resolution collapses symlinks and `..`, so neither `?project=/etc` nor a
+    `../../` escape nor a symlink can point the project scope at files outside
+    the user's own tree.
+    """
+    try:
+        resolved = Path(project).resolve()
+    except (OSError, RuntimeError):
+        return False
+    return any(resolved.is_relative_to(r.resolve()) for r in _project_safe_roots())
+
+
 @app.get("/config")
 async def get_config(project: Optional[str] = None):
     """Return skills, MCPs, and memory files for user scope + optional project scope."""
@@ -3847,7 +5736,7 @@ async def get_config(project: Optional[str] = None):
 
     # ---- PROJECT scope ----
     project_valid = False
-    if project:
+    if project and _project_within_safe_roots(project):
         proj = Path(project)
         if proj.exists() and proj.is_dir():
             project_valid = True
@@ -3926,7 +5815,7 @@ async def get_config(project: Optional[str] = None):
 # Trace summaries
 # --------------------------------------------------------------------------- #
 from fastapi import Body, HTTPException
-from summarizers import get_summarizer, available_summarizers, SummarizerError
+from summarizers import get_summarizer, available_summarizers, SummarizerError, KNOWN_BACKENDS
 import summaries as _summaries
 
 async def _session_meta(session_id: str, agent: str):
@@ -3952,6 +5841,16 @@ async def get_summarizer_config():
 
 @app.put("/config/summarizer")
 async def put_summarizer_config(cfg: dict = Body(...)):
+    # Reject an unknown backend up front rather than persisting garbage that
+    # silently disables every future summarizer call (#57). Validated against
+    # the live registry so all real backends (gemini/antigravity/qwen/
+    # openai_compat/…) stay accepted — not a stale hardcoded list.
+    backend = cfg.get("backend") or None
+    if backend is not None and backend not in KNOWN_BACKENDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown summarizer backend {backend!r}; expected one of {sorted(KNOWN_BACKENDS)}",
+        )
     return _summaries.save_config(cfg)
 
 
@@ -3970,6 +5869,29 @@ async def list_codex_models():
     model discovery."""
     from summarizers.codex import SUGGESTED_MODELS
     return {"models": SUGGESTED_MODELS}
+
+
+@app.post("/summarizer/openai-compat/test")
+async def test_openai_compat(cfg: dict = Body(...)):
+    """Ping the configured OpenAI-compatible endpoint with a trivial prompt so
+    the settings UI can confirm the server is reachable before saving. Accepts
+    the same shape as the config (top-level ``model`` + ``openai_compat`` block,
+    or a bare openai_compat dict)."""
+    from summarizers.openai_compat import OpenAICompatSummarizer
+    from summarizers.errors import classify as _classify_err
+
+    options = cfg.get("openai_compat") if isinstance(cfg.get("openai_compat"), dict) else cfg
+    sm = OpenAICompatSummarizer(model=cfg.get("model"), config=options)
+    try:
+        sample = sm.summarize("Reply with the single word: ok", timeout=30)
+        return {"ok": True, "sample": sample[:200], "endpoint": sm.endpoint}
+    except SummarizerError as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "error_info": _classify_err(str(e), backend_name="openai_compat"),
+        }
+
 
 @app.get("/sessions/{session_id}/summary")
 async def get_summary(session_id: str):
@@ -3998,7 +5920,7 @@ async def make_summary(session_id: str, agent: str, force: bool = False):
     narrative = None
     gen_error = None
     if cfg.get("enabled") and backend_name:
-        sm = get_summarizer(backend_name, cfg.get("model"))
+        sm = get_summarizer(backend_name, cfg.get("model"), cfg.get("openai_compat"))
         if sm and sm.is_available():
             try:
                 raw = sm.summarize(_summaries.build_prompt(brief))
@@ -4061,4 +5983,16 @@ if __name__ == "__main__":
             except ValueError: pass
         return 8000
 
-    uvicorn.run(app, host="127.0.0.1", port=_resolve_port())
+    # Host resolution order: --host CLI arg → TT_HOST env var → 127.0.0.1.
+    # Default stays loopback; set 0.0.0.0 (or a specific interface IP) to expose
+    # the API for remote/tailnet access. Pair with TT_ALLOWED_ORIGINS for CORS.
+    def _resolve_host() -> str:
+        argv = sys.argv[1:]
+        for i, arg in enumerate(argv):
+            if arg == "--host" and i + 1 < len(argv):
+                return argv[i + 1]
+            if arg.startswith("--host="):
+                return arg.split("=", 1)[1]
+        return os.environ.get("TT_HOST") or "127.0.0.1"
+
+    uvicorn.run(app, host=_resolve_host(), port=_resolve_port())

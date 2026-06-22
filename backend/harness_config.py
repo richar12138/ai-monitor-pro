@@ -1,6 +1,6 @@
 """TokenTelemetry config: aliases + hidden projects + budgets.
 
-Lives at ~/.tokentelemetry/. Files:
+Lives at the resolved data dir (default ~/.tokentelemetry/; see tt_paths). Files:
   - aliases.json   {"/old/path": "/new/path", ...}   one-way, no chains
   - hidden.json    ["/path", ...]                    projects excluded from dashboard
   - budgets.json   {"budgets": [ {...}, ... ]}        observational spend/token budgets
@@ -21,12 +21,26 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-HARNESS_DIR = Path.home() / ".tokentelemetry"
+from tt_paths import data_dir
+
+# Resolved once at import. The data dir is an install-time setting (exported via
+# TOKENTELEMETRY_DATA_DIR / TOKENTELEMETRY_HOME before the backend launches), so
+# reading it once here is correct; see tt_paths.data_dir for the precedence rules.
+HARNESS_DIR = data_dir()
 ALIASES_FILE = HARNESS_DIR / "aliases.json"
 HIDDEN_FILE = HARNESS_DIR / "hidden.json"
 BUDGETS_FILE = HARNESS_DIR / "budgets.json"
+PREFERENCES_FILE = HARNESS_DIR / "preferences.json"
 VERSION_FILE = HARNESS_DIR / "VERSION"
 SCHEMA_VERSION = 1
+
+# App preferences with their defaults. Only keys listed here are ever read from
+# or written to disk, so a stale/garbage file can't inject unknown settings.
+#   update_check: whether the dashboard may fetch the latest version + release
+#                 notes from GitHub (the only outbound call the app makes).
+DEFAULT_PREFERENCES: Dict[str, Any] = {
+    "update_check": True,
+}
 
 
 def _ensure_dir() -> None:
@@ -108,6 +122,40 @@ def unhide_project(path: str) -> Set[str]:
     current.discard(path)
     save_hidden(current)
     return current
+
+
+def load_preferences() -> Dict[str, Any]:
+    """Return app preferences, defaults filled in for anything missing/invalid.
+
+    Never raises: a missing or malformed file yields the defaults. Unknown keys
+    on disk are ignored so only recognised preferences ever take effect."""
+    prefs = dict(DEFAULT_PREFERENCES)
+    if not PREFERENCES_FILE.exists():
+        return prefs
+    try:
+        with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return prefs
+    if not isinstance(raw, dict):
+        return prefs
+    for key, default in DEFAULT_PREFERENCES.items():
+        if key in raw and isinstance(raw[key], type(default)):
+            prefs[key] = raw[key]
+    return prefs
+
+
+def save_preferences(updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge `updates` (known keys only) over current prefs and persist.
+
+    Returns the full preferences dict after the merge. Values whose type doesn't
+    match the default are skipped, so a bad payload can't corrupt a setting."""
+    prefs = load_preferences()
+    for key, default in DEFAULT_PREFERENCES.items():
+        if key in updates and isinstance(updates[key], type(default)):
+            prefs[key] = updates[key]
+    _atomic_write_json(PREFERENCES_FILE, prefs)
+    return prefs
 
 
 def list_aliases() -> Dict[str, str]:

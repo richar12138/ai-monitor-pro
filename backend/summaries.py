@@ -15,7 +15,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-TT_HOME = Path.home() / ".tokentelemetry"
+from tt_paths import data_dir
+
+TT_HOME = data_dir()
 _DB_PATH = TT_HOME / "summaries.db"
 _CONFIG_PATH = TT_HOME / "summarizer.json"
 
@@ -275,21 +277,28 @@ def content_hash(session_id: str, events: List[Dict[str, Any]]) -> str:
 def _conn() -> sqlite3.Connection:
     TT_HOME.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS summaries (
-            session_id   TEXT PRIMARY KEY,
-            agent        TEXT,
-            content_hash TEXT,
-            backend      TEXT,
-            model        TEXT,
-            brief_json   TEXT,
-            narrative_json TEXT,
-            summary_cost REAL,
-            generated_at TEXT
-        )"""
-    )
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS summaries (
+                session_id   TEXT PRIMARY KEY,
+                agent        TEXT,
+                content_hash TEXT,
+                backend      TEXT,
+                model        TEXT,
+                brief_json   TEXT,
+                narrative_json TEXT,
+                summary_cost REAL,
+                generated_at TEXT
+            )"""
+        )
+        return conn
+    except Exception:
+        # The DDL can fail on a corrupt DB, a read-only dir, or an incompatible
+        # schema. Close the just-opened handle before propagating so repeated
+        # failures don't leak file descriptors until the OS limit is hit (#52).
+        conn.close()
+        raise
 
 
 def get_cached(session_id: str) -> Optional[Dict[str, Any]]:
@@ -364,6 +373,33 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Config — which backend summarizes, persisted in ~/.tokentelemetry.
 # --------------------------------------------------------------------------- #
+def _coerce_openai_compat(raw: Any) -> Dict[str, Any]:
+    """Merge a user-supplied openai_compat sub-config over the canonical
+    defaults, coercing each field to its expected type. Unknown keys are
+    dropped so the persisted file stays clean."""
+    from summarizers.openai_compat import default_config
+
+    defaults = default_config()
+    merged = dict(defaults)
+    if isinstance(raw, dict):
+        for key, default in defaults.items():
+            if key not in raw or raw[key] is None:
+                continue
+            val = raw[key]
+            try:
+                if isinstance(default, bool):
+                    merged[key] = bool(val)
+                elif isinstance(default, int) and not isinstance(default, bool):
+                    merged[key] = int(val)
+                elif isinstance(default, float):
+                    merged[key] = float(val)
+                else:
+                    merged[key] = str(val)
+            except (TypeError, ValueError):
+                merged[key] = default
+    return merged
+
+
 def load_config() -> Dict[str, Any]:
     try:
         return json.loads(_CONFIG_PATH.read_text())
@@ -373,10 +409,15 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     TT_HOME.mkdir(parents=True, exist_ok=True)
-    out = {
+    out: Dict[str, Any] = {
         "enabled": bool(cfg.get("enabled")),
         "backend": cfg.get("backend") or None,
         "model": cfg.get("model") or None,
     }
+    # Persist the openai_compat sub-config whenever it's supplied — keeping it
+    # around even when another backend is active means the user's endpoint /
+    # tuning survives a backend switch.
+    if cfg.get("openai_compat") is not None or out["backend"] == "openai_compat":
+        out["openai_compat"] = _coerce_openai_compat(cfg.get("openai_compat"))
     _CONFIG_PATH.write_text(json.dumps(out, indent=2))
     return out

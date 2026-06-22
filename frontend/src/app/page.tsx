@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { format } from "date-fns";
@@ -10,7 +11,11 @@ import {
 import { useResource } from "@/lib/api";
 import { AGENTS, getAgent, type AgentKey } from "@/lib/agents";
 import SourceBadge from "@/components/SourceBadge";
+import CopilotSourceBadge from "@/components/CopilotSourceBadge";
+import AntigravitySourceBadge from "@/components/AntigravitySourceBadge";
+import LocalPowerInsights from "@/components/insights/LocalPowerInsights";
 import { formatTokens, formatCost } from "@/lib/format";
+import { costFraming, type BillingConfig } from "@/lib/billing";
 import {
   PageHeader, StatTile, Section, Card, CardHeader, CardTitle, CardEyebrow,
   Table, THead, TBody, TR, TH, TD, AgentBadge, Badge, Button, EmptyState, Skeleton,
@@ -25,6 +30,10 @@ interface Session {
   text?: string;
   tokens?: { input: number; output: number; cached: number; total: number };
   cost?: number;
+  /** Copilot-only: cli / vscode */
+  copilot_source?: string;
+  /** Antigravity-only: cli / ide / app */
+  antigravity_source?: string;
   /** Hermes-only: cli / telegram / cron / etc. */
   source_subtype?: string;
 }
@@ -40,6 +49,7 @@ export default function Home() {
   const sessionsRes = useResource<Session[]>("/sessions", { pollMs: 15_000, initial: [] });
   const agentsRes   = useResource<string[]>("/agents", { pollMs: 30_000, initial: [] });
   const analyticsRes = useResource<AnalyticsResponse>("/analytics", { pollMs: 30_000 });
+  const billingRes  = useResource<BillingConfig>("/config/billing", { pollMs: 60_000 });
 
   const sessions = (sessionsRes.data ?? []).slice().sort((a, b) => {
     const ta = new Date(a.timestamp).getTime();
@@ -53,6 +63,7 @@ export default function Home() {
   const totalTokens = sessions.reduce((a, s) => a + (s.tokens?.total ?? 0), 0);
   const totalCost   = sessions.reduce((a, s) => a + (s.cost ?? 0), 0);
   const projectCount = new Set(sessions.map((s) => s.project)).size;
+  const framing = costFraming(billingRes.data?.agents);
 
   const modelRows = Object.entries(byModel)
     .map(([name, s]) => ({ name, ...s }))
@@ -60,6 +71,14 @@ export default function Home() {
   const totalModelSessions = modelRows.reduce((a, r) => a + r.session_count, 0) || 1;
 
   const loading = sessionsRes.loading;
+
+  const [showLocalPower, setShowLocalPower] = useState(false);
+  useEffect(() => {
+    const check = () => setShowLocalPower(localStorage.getItem("tt-show-local-dash") === "true");
+    check();
+    window.addEventListener("storage", check);
+    return () => window.removeEventListener("storage", check);
+  }, []);
 
   return (
     <div className="px-8 py-8 max-w-[1600px] mx-auto space-y-10 pb-20">
@@ -112,14 +131,23 @@ export default function Home() {
             accent="var(--tt-info)"
           />
           <StatTile
-            label="Cost (est.)"
+            label="API equiv. (est.)"
             value={loading ? <Skeleton className="h-8 w-20" /> : formatCost(totalCost)}
-            hint={pricingUpdated ? `Rates updated ${pricingUpdated}` : undefined}
+            hint={framing.hint}
             icon={<DollarSign size={16} />}
             accent="var(--tt-warn)"
           />
         </div>
+        <p className="mt-3 text-[12px] leading-relaxed text-[var(--tt-fg-muted)]">
+          <span aria-hidden>💡</span>{" "}
+          {framing.callout}{" "}
+          <Link href="/settings" className="font-medium text-[var(--tt-fg)] underline underline-offset-2 hover:text-[var(--tt-brand)]">
+            Set your plans
+          </Link>.
+        </p>
       </Section>
+
+      {showLocalPower && <LocalPowerInsights forceShow={true} />}
 
       {/* Connected agents — split into coding vs autonomous */}
       {availableAgents.length > 0 && (() => {
@@ -228,8 +256,10 @@ export default function Home() {
                   {sessions.slice(0, 50).map((s, i) => (
                     <TR key={`${s.agent}-${s.id}-${i}`} interactive>
                       <TD className="pl-5">
-                        <Link href={`/sessions/${s.id}?agent=${s.agent}&from=${encodeURIComponent(pathname)}`} className="block">
+                        <Link href={`/sessions/${s.id}?agent=${s.agent}&from=${encodeURIComponent(pathname)}`} className="flex items-center gap-1.5">
                           <AgentBadge agent={s.agent} />
+                          {s.agent === "copilot" && <CopilotSourceBadge source={s.copilot_source} size="xs" />}
+                          {s.agent === "antigravity" && <AntigravitySourceBadge source={s.antigravity_source} size="xs" />}
                         </Link>
                       </TD>
                       <TD className="font-mono text-[12px] text-[var(--tt-fg-muted)] max-w-[160px] truncate" title={s.agent === "hermes" ? `Hermes source: ${s.source_subtype || "unknown"}` : s.project}>

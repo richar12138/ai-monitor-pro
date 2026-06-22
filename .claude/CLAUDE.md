@@ -78,9 +78,66 @@ The hook is intentionally narrow. Cases:
 5. **Repo without `origin/main`**: hook allows through (assumes you know your setup).
 6. **Last resort**: `claude --no-hooks` for that session — but if you find yourself reaching for this often, the rule is mis-tuned and worth revisiting.
 
+## Pre-push merge validation (two gates)
+
+After issue #91 (vulnerable + unused deps merged un-reviewed during the
+fast remote-access ship), every change destined for `main` passes two gates:
+
+1. **`.claude/hooks/prepush-claude-review.py`** (local, PreToolUse on `Bash`).
+   On a `git push` / `gh pr create` from a non-main branch, it diffs
+   `origin/main..HEAD`, sends the diff to your local `claude` CLI for a focused
+   review (dependency hygiene, remote-exposure / auth-bypass regressions,
+   committed secrets, injection-class bugs), and **denies the push only on an
+   explicit high-confidence `block` verdict**. It **fails open**: missing
+   `claude` CLI, empty/huge diff, timeout, or unparseable output all ALLOW the
+   push — a flaky reviewer never blocks legit work. Reuses the push-detection
+   helpers from `enforce-update-json.py` (imported, not duplicated). Skips
+   docs/asset-only pushes. Bypass with `--no-hooks`.
+2. **`.github/workflows/security-audit.yml`** (CI, deterministic). Runs
+   `npm audit --omit=dev --audit-level=high` across root / `frontend` / `website`
+   on every PR touching a `package.json`, failing on high/critical *runtime*
+   vulns (dev-only advisories are reported but non-blocking). This catches
+   contributor PRs (which the local hook can't see) and is the exact gate that
+   would have stopped #91. Lockfiles are gitignored, so CI uses
+   `npm install --package-lock-only` — fixes ride on the committed `package.json`
+   pins + `overrides`, not a lockfile.
+
 ## Other project conventions
 
 - **Schedules page is read-only.** The CRUD UI was built but is commented out under `# DISABLED-MUTATIONS:` markers in `backend/main.py`. Re-enable by uncommenting; don't reimplement.
-- **Backend default port: 8000** (matches `bin/cli.js`). If you start uvicorn elsewhere, frontend's `NEXT_PUBLIC_API_BASE` must follow.
+- **Backend default port: 8000** (matches `bin/cli.js`). The frontend derives its API base from `window.location` + `NEXT_PUBLIC_API_PORT` at runtime (set by `bin/cli.js` from `--api-port`), so a non-default port works automatically. `NEXT_PUBLIC_API_BASE` still works as an explicit override (pin a fixed host) but is no longer required just to change the port. For remote/tailnet access use `--host` / `--allowed-origins` (envs `TT_HOST` / `TT_ALLOWED_ORIGINS`); default stays loopback-only. **Remote access is token-gated:** a non-loopback `--host` auto-generates `TT_AUTH_TOKEN` (printed once at startup) and `backend/main.py`'s `RemoteAuthMiddleware` then requires it on every *remote* request — loopback is always exempt, so the default local experience is unchanged. CORS is **not** the security boundary (it only restrains browsers); the token is. Frontend carries it via `Authorization: Bearer` (and `?token=` for artifact `<img>`/`<a>` loads) — see `frontend/src/lib/api.ts` + `TokenGate.tsx`. Override with `--auth-token`, or disable on a trusted tailnet with `--insecure-no-auth`. The middleware is registered **before** CORS so CORS stays outermost (answers OPTIONS preflight, decorates the 401).
 - **`UPDATE.json` is committed.** It's not generated, not gitignored. Treat it as source code.
 - **Test pollution: clear `~/.tokentelemetry/.update-check.json`** if you manually seed it for testing; the SHA validator added in PR #34 catches obvious garbage but doesn't catch all dev mistakes.
+
+## Summarizer error handling (never dump raw errors in the UI)
+
+Any failure from a summarizer backend (CLI non-zero exit, HTTP 4xx/5xx, timeout,
+empty output) **must be classified, not surfaced raw**. A user should never see a
+bare stack trace, `HTTP 4xx …`, or a provider's JSON blob as the error message.
+
+The pipeline is:
+
+1. **Adapters raise `SummarizerError`** with the underlying detail kept in the
+   message (status code + provider body), so the classifier has something to
+   match on. HTTP adapters keep the numeric status in the string (e.g.
+   `HTTP 413 from …: {…}`).
+2. **`backend/summarizers/errors.py::classify()`** buckets it into a `category`
+   and returns `{category, title, message, hint, raw}` — a short human title, a
+   plain-English message, an actionable hint, and the truncated raw text (shown
+   only behind a "Show raw error" disclosure). Patterns are ordered, first match
+   wins; order matters (e.g. `too_large` before `quota` because token-budget
+   413s also carry rate-limit wording).
+3. **The endpoint returns `error_info`**, and the frontend renders it via
+   `SummaryErrorCard` (`SummaryPanel.tsx`) / the Test-connection result.
+
+**When you add a new error category** you must touch all three layers or it
+won't compile / won't render:
+- add the pattern + `title`/`message`/`hint` branch in `errors.py`;
+- add it to the `SummaryErrorInfo["category"]` union in `frontend/src/lib/summarizer.ts`;
+- add an icon to `ERROR_ICONS` in `SummaryPanel.tsx` (it's a total `Record`, so
+  TS fails the build if a category is missing).
+
+Hints should tell the user what to *do* (switch model, check `ollama serve`,
+set an env var), not just restate the error. Prefer graceful degradation over a
+hard error where possible — e.g. the `openai_compat` adapter retries once with a
+clean OpenAI-only payload when a strict gateway 400s on a non-standard field.
