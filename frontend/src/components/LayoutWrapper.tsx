@@ -6,6 +6,7 @@ import WhatsNewBanner from "./WhatsNewBanner";
 import { NotificationProvider } from "./notifications/NotificationProvider";
 import NotificationToaster from "./notifications/NotificationToaster";
 import TokenGate from "./TokenGate";
+import TelemetryNotice from "./TelemetryNotice";
 import { useEffect, useState } from "react";
 
 export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
         </main>
         <FeedbackFloatingButton />
         <TokenGate />
+        <TelemetryNotice />
       </body>
     </NotificationProvider>
   );

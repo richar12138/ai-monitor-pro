@@ -6,6 +6,8 @@ import { cn } from "@/lib/cn";
 import { PageHeader, Section, Card, CardHeader, CardTitle, Button, Badge, Skeleton } from "@/components/ui";
 import { BackendPicker } from "@/components/summarizer/BackendPicker";
 import { BillingSettings } from "@/components/settings/BillingSettings";
+import { RetentionSettings } from "@/components/settings/RetentionSettings";
+import UsagePrivacySettings from "@/components/settings/UsagePrivacySettings";
 import { ConnectDevice } from "@/components/ConnectDevice";
 import {
   getSummarizerConfig, getAvailableBackends, putSummarizerConfig,
@@ -214,6 +216,13 @@ export default function SettingsPage() {
       </Section>
 
       <Section
+        title="Agent history & retention"
+        description="Keep analytics history alive after agents prune their own transcripts. Core session stats are always retained; opt in per agent to also archive full transcripts, and reclaim space anytime without losing your history."
+      >
+        <RetentionSettings />
+      </Section>
+
+      <Section
         title="Dashboard preferences"
         description="Customize what you see on the main dashboard."
       >
@@ -232,8 +241,11 @@ export default function SettingsPage() {
 
       <Section
         title="Updates & privacy"
-        description="TokenTelemetry never sends your logs, sessions, tokens, or costs anywhere — those stay on your machine. The only outbound network call is this optional update check."
+        description="Your logs, sessions, tokens, and costs always stay on your machine. The two optional outbound calls are anonymous usage stats (below) and the update check — both are content-free and can be turned off."
       >
+        <div id="usage-privacy" className="scroll-mt-20 mb-4">
+          <UsagePrivacySettings />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>

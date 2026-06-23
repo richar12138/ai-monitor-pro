@@ -55,3 +55,15 @@ GRAPH_REPORT.md
 .claude/worktrees/
 # Local plan files
 .claude/plans/
+
+# Durable history store (default lives in ~/.tokentelemetry; defensive guard
+# for devs who point TOKENTELEMETRY_DATA_DIR into the tree)
+history.db
+history.db-wal
+history.db-shm
+AUDIT-grok.md
+AUDIT-gemini.md
+tokentelemetry-cro-analysis.md
+pr.diff
+simulate.py
+.grok/

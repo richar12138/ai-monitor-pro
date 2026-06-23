@@ -15,6 +15,44 @@
       ]
     },
     {
+      "tag": "2026-06-17",
+      "title": "See an agent's files right in its trace",
+      "highlights": [
+        {
+          "title": "Antigravity session artifacts now show in the Artifacts tab",
+          "description": "Open an Antigravity session and the files it produced are right there in the trace's Artifacts tab — its markdown audit/QA reports render formatted (with their embedded screenshots inline) and every captured screenshot appears as a thumbnail. Click any artifact, or the new expand icon, to open it full-screen, and download any file in one click. No more digging through ~/.gemini to find what a run created.",
+          "href": "/sessions"
+        }
+      ]
+    },
+    {
+      "tag": "2026-06-15",
+      "title": "Privacy you can see — and switch off",
+      "highlights": [
+        {
+          "title": "Anonymous usage stats, explained plainly",
+          "description": "As TokenTelemetry evolves we need to understand how it's actually used — which features deliver value — so we can make it better for everyone. The app now shares a small set of anonymous usage signals: which pages and features you use, your OS and app version, and a coarse country derived at the network edge (never your IP). It carries nothing about your work — no code, prompts, file paths, project names, tokens, or costs. It's on by default so the picture is representative, but one click turns it off under Settings → Usage & privacy, and DO_NOT_TRACK=1 (or TT_NO_TELEMETRY=1) forces it off for restricted or enterprise environments.",
+          "href": "/settings#usage-privacy"
+        }
+      ]
+    },
+    {
+      "tag": "2026-06-13",
+      "title": "Analytics by date — and history that survives cleanup",
+      "highlights": [
+        {
+          "title": "Filter analytics by date range, week, or month",
+          "description": "The graph is no longer stuck at the last 7 days. Pick a preset (7d, 30d, this month, this year), set a custom range, or switch the buckets to weekly/monthly — and narrow to specific agents or models. Everything is filtered server-side, so even a full year stays fast.",
+          "href": "/analytics"
+        },
+        {
+          "title": "Your history no longer disappears when agents prune it",
+          "description": "Coding agents quietly delete their own session transcripts on a schedule (Claude Code after 30 days by default), which used to erase your older analytics with them. TokenTelemetry now keeps a tiny durable summary of every session it sees, so long-range trends survive. Under Settings you can see each agent's cleanup window, opt to keep full transcripts past it, and reclaim space anytime without losing your stats.",
+          "href": "/settings"
+        }
+      ]
+    },
+    {
       "tag": "2026-06-13",
       "title": "Truer costs: local power + which credit pool pays",
       "highlights": [
@@ -257,26 +295,6 @@
         {
           "title": "Smarter 'Back' from a session",
           "description": "Opening a session and hitting Back now returns you to the page you came from — e.g. the project you were viewing — instead of always jumping to the dashboard."
-        }
-      ]
-    },
-    {
-      "tag": "2026-05-31",
-      "title": "Notifications & project budgets",
-      "highlights": [
-        {
-          "title": "Per-project & per-agent budgets",
-          "description": "Set a monthly, weekly, or rolling-30-day spend limit on a project — overall and per coding agent (e.g. Claude $60, Codex unlimited). Track usage in dollars or tokens.",
-          "href": null
-        },
-        {
-          "title": "Budget at a glance",
-          "description": "Open any project to see spend vs limit: a budget pill in the header and a progress card under Insights, with a per-agent breakdown."
-        },
-        {
-          "title": "Notification center",
-          "description": "A bell in the sidebar collects budget alerts with an unread count; new alerts surface once at the top, then wait in the bell. Mark read or clear all when you're done.",
-          "href": null
         }
       ]
     },

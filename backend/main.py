@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, Request
+from fastapi import FastAPI, Body, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Set
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time as _dtime
 from urllib.parse import unquote, quote
 
 from harness_config import (
@@ -2173,6 +2173,64 @@ def _antigravity_link_subagents(sessions: List[Dict[str, Any]]) -> None:
                 if child is not None:
                     child["parent_session_id"] = sid
 
+
+# Brain dirs Antigravity itself manages — NOT user-facing artifacts.
+_ANTIGRAVITY_INTERNAL_DIRS = {".system_generated", ".agents"}
+_ANTIGRAVITY_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _antigravity_brain_reports(sess_dir: Path, existing_paths: set) -> List[Dict[str, str]]:
+    """Surface an Antigravity brain session's human-readable deliverables.
+
+    Antigravity drops markdown reports at the session root and screenshots under
+    one or more `screenshots*/` dirs. The base brain scanner only picks up the
+    three canonical docs (task/plan/walkthrough) plus root-level media, so the
+    audit/QA reports and the screenshot galleries are invisible in the UI. This
+    collects them as artifacts:
+
+      - every top-level `*.md` -> type "document"
+      - every image under any sibling `screenshots*/` dir -> type "image",
+        named "<dir>/<file>" when more than one screenshot dir exists (so the
+        gallery they came from is legible), else just the filename.
+
+    Internal Antigravity dirs (.system_generated, .agents) are skipped — they
+    hold transcripts/agent state, not deliverables. `existing_paths` (abs path
+    strings already added by the caller) dedups against the canonical docs so a
+    `task.md` isn't surfaced twice. Sorted docs-first, then screenshots in
+    (dir, filename) order. Best-effort — never raises."""
+    docs: List[Dict[str, str]] = []
+    images: List[Dict[str, str]] = []
+    try:
+        # Top-level markdown reports (anything beyond the canonical three).
+        for md in sorted(sess_dir.glob("*.md")):
+            if not md.is_file():
+                continue
+            ap = str(md)
+            if ap in existing_paths:
+                continue
+            docs.append({"name": md.name, "path": ap, "type": "document"})
+        # Screenshot galleries: every `screenshots*/` sibling dir.
+        shot_dirs = sorted(
+            d for d in sess_dir.iterdir()
+            if d.is_dir()
+            and d.name.startswith("screenshots")
+            and d.name not in _ANTIGRAVITY_INTERNAL_DIRS
+        )
+        multi = len(shot_dirs) > 1
+        for d in shot_dirs:
+            for img in sorted(d.iterdir()):
+                if not img.is_file() or img.suffix.lower() not in _ANTIGRAVITY_IMAGE_EXTS:
+                    continue
+                ap = str(img)
+                if ap in existing_paths:
+                    continue
+                name = f"{d.name}/{img.name}" if multi else img.name
+                images.append({"name": name, "path": ap, "type": "image"})
+    except OSError:
+        pass
+    return docs + images
+
+
 # Skill / slash-command invocations (Claude Code). Two structured signals:
 #   - assistant tool_use named "Skill" with input.skill = "<name>";
 #   - <command-name>/<name></command-name> tags echoed into user lines.
@@ -2974,6 +3032,12 @@ def _scan_sessions_sync():
                                 artifacts.append({"name": af.name, "path": str(af), "type": "image"})
                 except Exception: pass
 
+                # Markdown reports (giri_audit_report, qa_test_log, …) and the
+                # screenshots*/ galleries Antigravity writes alongside the canonical
+                # task/plan/walkthrough docs. Dedup against paths already added above.
+                _existing_paths = {a["path"] for a in artifacts}
+                artifacts.extend(_antigravity_brain_reports(sess_dir, _existing_paths))
+
                 # Pull in a sampled slice of browser_recordings/<sid> frames
                 try:
                     rec_dir = GEMINI_DIR / "antigravity" / "browser_recordings" / sid
@@ -3636,6 +3700,66 @@ def _get_sessions_lock() -> _asyncio.Lock:
     return _sessions_lock
 
 
+def _archive_opted_in_transcripts(data: List[Dict[str, Any]]) -> None:
+    """For agents the user opted into, copy each session's on-disk transcript
+    into the durable store (tier 2) so it survives the agent's own pruning.
+    Best-effort and only for agents whose transcript is a single resolvable
+    file; everything else stays rollup-only. Runs on the scan worker thread."""
+    import history_store
+    from agent_retention import archive_enabled
+
+    for s in data:
+        agent, sid = s.get("agent"), s.get("id")
+        if not agent or not sid or not archive_enabled(agent):
+            continue
+        if s.get("transcript_archived"):
+            continue
+        path = _resolve_transcript_path(agent, sid)
+        if not path:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if text:
+            history_store.put_transcript(agent, sid, text)
+
+
+def _resolve_transcript_path(agent: str, session_id: str) -> Optional[Path]:
+    """Best-effort single-file transcript path for archivable agents."""
+    try:
+        if agent == "claude":
+            hits = list(CLAUDE_DIR.glob(f"projects/**/{session_id}.jsonl"))
+            return hits[0] if hits else None
+        if agent == "codex":
+            hits = list(CODEX_DIR.glob(f"sessions/**/*{session_id}*.jsonl"))
+            return hits[0] if hits else None
+    except OSError:
+        return None
+    return None
+
+
+def _persist_history_async(data: List[Dict[str, Any]]) -> None:
+    """Schedule the durable-history write off the request path. Fire-and-forget:
+    failures are logged inside the store and never surface to the caller."""
+    import history_store
+
+    def _work() -> None:
+        try:
+            history_store.upsert_sessions(data)
+            history_store.mark_absent({(s.get("agent"), s.get("id")) for s in data
+                                       if s.get("agent") and s.get("id")})
+            _archive_opted_in_transcripts(data)
+        except Exception as e:  # noqa: BLE001
+            _log.exception("history persist failed: %s", e)
+
+    try:
+        _asyncio.get_running_loop().run_in_executor(None, _work)
+    except RuntimeError:
+        # No running loop (e.g. called from a sync context) — run inline.
+        _work()
+
+
 async def get_sessions_cached(fresh: bool = False) -> List[Dict[str, Any]]:
     """Cached, non-blocking access to the session list.
 
@@ -3666,6 +3790,11 @@ async def get_sessions_cached(fresh: bool = False) -> List[Dict[str, Any]]:
             _sessions_cache["data"] = data
             _sessions_cache["at"] = _time.monotonic()
             _log.info("sessions scan: %d entries in %.0fms", len(data), (_time.monotonic() - t0) * 1000)
+            # Durable rollup: persist a tiny summary of each session so history
+            # outlives the agents' own transcript pruning. Fire-and-forget on a
+            # worker thread — a store failure must never break a request, and the
+            # write must not add latency to this scan.
+            _persist_history_async(data)
         except Exception as e:
             _log.exception("sessions scan failed: %s", e)
             # If we have a previous value, keep serving it rather than 500-ing.
@@ -4580,6 +4709,141 @@ async def post_update_check(payload: dict = Body(...)):
     return {"enabled": enabled, "env_forced_off": env_off, "effective": enabled and not env_off}
 
 
+# --- Product telemetry (anonymous, opt-out, content-free) -----------------
+import telemetry as _telemetry
+
+# Frontend events we accept through the bridge. Backend-origin events
+# (app.launched, trace.summarized) are emitted server-side and not listed here,
+# so a remote caller can't spoof them.
+_TELEMETRY_CLIENT_EVENTS = {"page.viewed", "analytics.filtered", "feature.used"}
+
+
+@app.get("/config/telemetry")
+async def get_telemetry():
+    """Current telemetry state for the Settings toggle. Same shape as
+    update-check: `enabled` is the saved preference, `env_forced_off` is true
+    when DO_NOT_TRACK / TT_NO_TELEMETRY is set (toggle read-only), `effective`
+    is what actually happens (env + CI win). `notice_ack` is true once the
+    user has acknowledged the first-run notice (persisted in local prefs)."""
+    prefs = load_preferences()
+    pref = bool(prefs.get("telemetry", True))
+    return {
+        "enabled": pref,
+        "env_forced_off": _telemetry.env_forced_off(),
+        "is_ci": _telemetry._is_ci(),
+        "effective": _telemetry.enabled(),
+        "notice_ack": bool(prefs.get("telemetry_notice_ack", False)),
+    }
+
+
+@app.post("/config/telemetry")
+async def post_telemetry(payload: dict = Body(...)):
+    """Persist the telemetry preference. Body: {"enabled": bool}."""
+    from fastapi import HTTPException
+    enabled = payload.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="'enabled' must be a boolean")
+    save_preferences({"telemetry": enabled})
+    return {
+        "enabled": enabled,
+        "env_forced_off": _telemetry.env_forced_off(),
+        "is_ci": _telemetry._is_ci(),
+        "effective": _telemetry.enabled(),
+    }
+
+
+@app.post("/config/telemetry/ack")
+async def post_telemetry_ack():
+    """Persist that the first-run notice was acknowledged so it never shows again."""
+    save_preferences({"telemetry_notice_ack": True})
+    return {"notice_ack": True}
+
+
+@app.get("/config/telemetry/preview")
+async def get_telemetry_preview():
+    """Exactly what telemetry would send (synthetic samples + recent real sends)
+    + the never-collected list. Powers the transparency panel."""
+    return _telemetry.preview()
+
+
+@app.post("/telemetry/event")
+async def post_telemetry_event(payload: dict = Body(...)):
+    """Bridge for frontend-origin events. The event name must be in the
+    client-events allowlist; props are re-sanitized server-side by telemetry.emit
+    regardless, so this endpoint can't be used to exfiltrate anything."""
+    event = payload.get("event")
+    if not isinstance(event, str) or event not in _TELEMETRY_CLIENT_EVENTS:
+        return {"ok": False}
+    props = payload.get("props")
+    _telemetry.emit(event, props if isinstance(props, dict) else None)
+    return {"ok": True}
+
+
+@app.on_event("startup")
+async def _telemetry_startup():
+    """Seed the anonymous context once, then emit app.launched. All best-effort —
+    a failure here must never block the server from starting."""
+    try:
+        try:
+            cfg = _summaries.load_config()
+            backend = cfg.get("backend") if cfg.get("enabled") else "none"
+        except Exception:
+            backend = "none"
+        _telemetry.update_context(
+            app_version=(_local_commit() or "unknown")[:12],
+            agents=_list_available_agents(),
+            summarizer_backend=backend or "none",
+        )
+        _telemetry.emit("app.launched")
+    except Exception:
+        pass
+
+
+@app.get("/config/retention")
+async def get_retention():
+    """Per-agent transcript-retention info + TT archive opt-ins + storage usage.
+
+    Drives the Settings "Agent history & retention" section: shows each present
+    agent's default cleanup window (and the user's real override where we can
+    read it), whether TT can archive it, the opt-in state, and how much space
+    the durable store is using per tier."""
+    import agent_retention
+    import history_store
+    agents = _list_available_agents()
+    return {
+        "agents": agent_retention.describe_agents(agents),
+        "storage": history_store.storage_stats(),
+        "coverage": history_store.coverage(),
+    }
+
+
+@app.post("/config/retention")
+async def post_retention(payload: dict = Body(...)):
+    """Toggle whether TT keeps full transcripts for an agent past its own
+    pruning. Body: {"agent": str, "enabled": bool}."""
+    from fastapi import HTTPException
+    import agent_retention
+    agent = payload.get("agent")
+    enabled = payload.get("enabled")
+    if not isinstance(agent, str) or not agent:
+        raise HTTPException(status_code=400, detail="'agent' is required")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="'enabled' must be a boolean")
+    flags = agent_retention.set_archive(agent, enabled)
+    return {"ok": True, "archive": flags}
+
+
+@app.delete("/history/transcripts")
+async def delete_history_transcripts(agent: Optional[str] = None,
+                                     older_than_days: Optional[int] = None):
+    """Purge archived (tier-2) transcript blobs to reclaim space. The core
+    rollup and any generated summaries are left intact, so analytics history is
+    preserved — only the heavy full-transcript copies are removed."""
+    import history_store
+    deleted = history_store.delete_transcripts(agent=agent, older_than_days=older_than_days)
+    return {"ok": True, "deleted": deleted, "storage": history_store.storage_stats()}
+
+
 @app.get("/config/power")
 async def get_power_config():
     """Power & subscription cost config for local/subscription models.
@@ -5035,8 +5299,70 @@ def _cache_hit_pct(input_tokens: int, cached_tokens: int) -> Optional[float]:
     return round((cached_tokens / denom) * 100, 1)
 
 
+def _bucket_key(ts: datetime, granularity: str) -> str:
+    """Local-time bucket label for a session timestamp. ``day`` keeps the
+    existing %Y-%m-%d key; ``week`` collapses to that week's ISO Monday; ``month``
+    to the first of the month. Always local, matching the original day bucket."""
+    d = ts.astimezone()
+    if granularity == "week":
+        monday = d - timedelta(days=d.weekday())
+        return monday.strftime("%Y-%m-%d")
+    if granularity == "month":
+        return d.strftime("%Y-%m-01")
+    return d.strftime("%Y-%m-%d")
+
+
+def _date_bound(value: Optional[str], *, end: bool) -> Optional[str]:
+    """Turn a 'YYYY-MM-DD' (or full ISO) filter value into a UTC-ISO bound that
+    compares correctly against the store's UTC ``last_ts``. A bare date becomes
+    local start-of-day (``end=False``) or end-of-day (``end=True``)."""
+    if not value:
+        return None
+    v = value.strip()
+    try:
+        if "T" in v:
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            d = datetime.fromisoformat(v).date()
+            t = _dtime(23, 59, 59, 999999) if end else _dtime(0, 0, 0, 0)
+            dt = datetime.combine(d, t)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.astimezone()  # interpret bare value in local time
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def _session_in_filters(s: Dict[str, Any], from_b: Optional[str], to_b: Optional[str],
+                        agents: List[str], models: List[str], projects: List[str]) -> bool:
+    """Apply the same window + allow-list filters to a live session dict that the
+    store applies in SQL, so merged live rows respect the selected view."""
+    if agents and s.get("agent") not in agents:
+        return False
+    if models and s.get("model") not in models:
+        return False
+    if projects and s.get("project") not in projects:
+        return False
+    ts = s.get("timestamp")
+    if isinstance(ts, datetime) and (from_b or to_b):
+        iso = ts.astimezone(timezone.utc).isoformat()
+        if from_b and iso < from_b:
+            return False
+        if to_b and iso > to_b:
+            return False
+    return True
+
+
 @app.get("/analytics")
-async def get_analytics():
+async def get_analytics(
+    from_: Optional[str] = Query(None, alias="from"),
+    to: Optional[str] = Query(None),
+    granularity: str = Query("day"),
+    agents: List[str] = Query(default=[]),
+    models: List[str] = Query(default=[]),
+    projects: List[str] = Query(default=[]),
+):
+    import history_store
     from power_config import (
         is_local_session, load_power_config, default_tok_per_sec_for_model, co2_for_session,
     )
@@ -5044,7 +5370,25 @@ async def get_analytics():
     pc = load_power_config()
     load_watts = pc.get("loadWatts", 80)
     ref_model = pc.get("referenceCloudModel", "claude-sonnet-4-6")
-    sessions = await get_sessions_cached(); by_agent = {}; by_day = {}; by_model = {}
+    if granularity not in ("day", "week", "month"):
+        granularity = "day"
+
+    # Build the working set from the durable store (full history, filtered in
+    # SQL) merged with the live scan (freshest in-flight sessions). The live
+    # scan only matters for a window that reaches today, so a purely-historical
+    # query is served entirely from SQLite — no file scan.
+    from_b = _date_bound(from_, end=False)
+    to_b = _date_bound(to, end=True)
+    stored = history_store.query(from_b, to_b, agents, models, projects)
+    merged: Dict[tuple, Dict[str, Any]] = {(s["agent"], s["id"]): s for s in stored}
+    today_local = datetime.now().astimezone().strftime("%Y-%m-%d")
+    window_includes_today = (to_b is None) or (to is None) or (to >= today_local)
+    if window_includes_today:
+        for s in await get_sessions_cached():
+            if _session_in_filters(s, from_b, to_b, agents, models, projects):
+                merged[(s.get("agent"), s.get("id"))] = s  # live wins over stored
+    sessions = list(merged.values())
+    by_agent = {}; by_day = {}; by_model = {}
     for s in sessions:
         agent = s["agent"]
         if agent not in by_agent:
@@ -5081,7 +5425,7 @@ async def get_analytics():
         by_model[model_name]["co2_g"] += co2
         by_model[model_name]["session_count"] += 1
         # Bucket by LOCAL day, not UTC.
-        day = s["timestamp"].astimezone().strftime("%Y-%m-%d")
+        day = _bucket_key(s["timestamp"], granularity)
         if day not in by_day:
             by_day[day] = {"total": 0, "input": 0, "output": 0, "cached": 0, "cost": 0.0,
                            "energy_wh": 0.0, "savings_usd": 0.0, "co2_g": 0.0}
@@ -5226,6 +5570,8 @@ async def get_analytics():
             "co2_g": sum(a["co2_g"] for a in by_agent.values()),
             "cache_hit_pct": _cache_hit_pct(total_input, total_cached),
         },
+        "coverage": history_store.coverage(),
+        "granularity": granularity,
         "pricing_updated": PRICING_UPDATED,
     }
 
@@ -5851,7 +6197,14 @@ async def put_summarizer_config(cfg: dict = Body(...)):
             status_code=400,
             detail=f"unknown summarizer backend {backend!r}; expected one of {sorted(KNOWN_BACKENDS)}",
         )
-    return _summaries.save_config(cfg)
+    saved = _summaries.save_config(cfg)
+    try:
+        _telemetry.update_context(
+            summarizer_backend=(saved.get("backend") if saved.get("enabled") else "none") or "none"
+        )
+    except Exception:
+        pass
+    return saved
 
 
 @app.get("/summarizer/ollama/models")
@@ -5942,6 +6295,13 @@ async def make_summary(session_id: str, agent: str, force: bool = False):
     if gen_error:
         from summarizers.errors import classify as _classify_err
         error_info = _classify_err(gen_error, backend_name=backend_name or "")
+    try:
+        _telemetry.emit("trace.summarized", {
+            "backend": backend_name or "none",
+            "outcome": "error" if gen_error else ("ok" if narrative else "empty"),
+        })
+    except Exception:
+        pass
     return {"summary": {**result, "stale": False}, "error": gen_error, "error_info": error_info}
 
 @app.post("/summaries/recent")
