@@ -40,6 +40,15 @@ export interface SessionRow {
   mcp_usage?: Record<string, Record<string, number>>;
 }
 
+export interface WorktreeSummary {
+  name: string;
+  path: string;
+  session_count: number;
+  tokens: { input: number; output: number; cached: number; total: number; cost: number };
+  agents: string[];
+  status: string;
+}
+
 export interface ProjectData {
   name: string;
   path: string;
@@ -51,6 +60,25 @@ export interface ProjectData {
   plan_count: number;
   plans: PlanSnippet[];
   tokens?: { input: number; output: number; cached: number; total: number };
+  // Git-worktree grouping (added by the backend)
+  canonical_repo?: string;
+  is_worktree?: boolean;
+  worktree_name?: string;
+  parent_path?: string;
+  parent_name?: string;
+  is_repo_root?: boolean;
+  synthesized?: boolean;
+  worktrees?: WorktreeSummary[];
+  aggregate?: {
+    session_count: number;
+    subagent_count: number;
+    plan_count: number;
+    configured_subagent_count: number;
+    tokens: { input: number; output: number; cached: number; total: number; cost: number };
+    agents: string[];
+    mcp_tools: string[];
+    worktree_count: number;
+  };
 }
 
 interface ProjectCtx {

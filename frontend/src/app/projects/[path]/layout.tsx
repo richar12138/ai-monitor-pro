@@ -5,11 +5,12 @@ import { useParams, usePathname } from "next/navigation";
 import { useMemo } from "react";
 import {
   ChevronRight, Folder, Activity, Sparkles, ClipboardList, Settings2,
-  Clock, Users, Zap,
+  Clock, Users, Zap, GitBranch,
 } from "lucide-react";
 
 import { useResource } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { formatCost, formatTokens } from "@/lib/format";
 import { Card, AgentBadge } from "@/components/ui";
 import { ProjectProvider, type ProjectData, type SessionRow } from "./_lib/project-context";
 
@@ -45,6 +46,7 @@ export default function ProjectShellLayout({ children }: { children: React.React
 
   const projectName = decodedPath.split("/").pop() || "Unknown Project";
   const totalTokens = sessions.reduce((sum, s) => sum + (s.tokens?.total ?? 0), 0);
+  const directCost = sessions.reduce((sum, s) => sum + (s.cost ?? 0), 0);
   const subagents = (project?.configured_subagent_count ?? 0) + (project?.subagent_count ?? 0);
   const plansCount = project?.plans?.length ?? 0;
 
@@ -69,6 +71,17 @@ export default function ProjectShellLayout({ children }: { children: React.React
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12px] text-[var(--tt-fg-dim)] mb-4">
           <Link href="/projects" className="hover:text-[var(--tt-fg)] transition-colors">Projects</Link>
           <ChevronRight size={12} className="text-[var(--tt-fg-faint)]" />
+          {project?.is_worktree && project?.parent_path && (
+            <>
+              <Link
+                href={`/projects/${encodeURIComponent(project.parent_path)}`}
+                className="inline-flex items-center gap-1 hover:text-[var(--tt-fg)] transition-colors"
+              >
+                <GitBranch size={11} />{project.parent_name}
+              </Link>
+              <ChevronRight size={12} className="text-[var(--tt-fg-faint)]" />
+            </>
+          )}
           <span className="text-[var(--tt-fg-muted)] truncate max-w-[420px]" title={decodedPath}>
             {projectName}
           </span>
@@ -104,6 +117,69 @@ export default function ProjectShellLayout({ children }: { children: React.React
             </div>
           </div>
         </Card>
+
+        {/* Worktrees of this repo: navigation + aggregated metrics.
+            Rows = this repo (direct) + each worktree, summing to the ∑ total. */}
+        {project?.worktrees && project.worktrees.length > 0 && project.aggregate && (
+          <Card padding="md" className="mb-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--tt-fg)]">
+                <GitBranch size={15} className="text-[var(--tt-brand)]" />
+                {project.aggregate.worktree_count} {project.aggregate.worktree_count === 1 ? "worktree" : "worktrees"}
+                <span className="font-normal text-[11px] text-[var(--tt-fg-dim)]">· this repo + worktrees</span>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-[var(--tt-fg-dim)]">
+                <span title="Sessions across this repo + all its worktrees">
+                  ∑ {project.aggregate.session_count} sessions
+                </span>
+                <span title="Tokens across this repo + all its worktrees">
+                  ∑ {formatTokens(project.aggregate.tokens.total)} tok
+                </span>
+                <span className="text-amber-300 font-semibold" title="API-equivalent cost across this repo + all its worktrees">
+                  ∑ {formatCost(project.aggregate.tokens.cost)}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {/* This repo's own (direct) contribution to the total */}
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--tt-radius)] border border-[color:var(--tt-brand)]/25 bg-[color:var(--tt-brand)]/5">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-medium text-[var(--tt-fg)] truncate flex items-center gap-1.5">
+                    <Folder size={12} className="text-[var(--tt-brand)] shrink-0" />
+                    {projectName} <span className="text-[10px] font-normal text-[var(--tt-fg-dim)]">(this repo · direct)</span>
+                  </div>
+                  <div className="text-[10px] text-[var(--tt-fg-dim)] tabular">
+                    {sessions.length} sessions · {formatTokens(totalTokens)} tok
+                  </div>
+                </div>
+                <span className="text-[11px] tabular text-amber-300 font-semibold shrink-0">{formatCost(directCost)}</span>
+              </div>
+              {project.worktrees.map((w) => (
+                <Link
+                  key={w.path}
+                  href={`/projects/${encodeURIComponent(w.path)}`}
+                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--tt-radius)] border border-[var(--tt-border)] bg-[var(--tt-panel)] hover:border-[color:var(--tt-brand)]/40 hover:bg-[color:var(--tt-brand)]/5 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-medium text-[var(--tt-fg)] truncate group-hover:text-[var(--tt-brand)] transition-colors flex items-center gap-1.5" title={w.path}>
+                      <span className="truncate">{w.name}</span>
+                      {w.status !== "active" && (
+                        <span className="shrink-0 text-[9px] uppercase tracking-wide text-[var(--tt-fg-faint)] border border-[var(--tt-border)] rounded px-1" title="Worktree folder no longer on disk">deleted</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[var(--tt-fg-dim)] tabular">
+                      {w.session_count} sessions · {formatTokens(w.tokens.total)} tok
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] tabular text-amber-300 font-semibold">{formatCost(w.tokens.cost)}</span>
+                    <ChevronRight size={13} className="text-[var(--tt-fg-faint)] group-hover:text-[var(--tt-brand)] group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Sticky tab strip */}
         <div className="sticky top-0 z-20 -mx-8 px-8 py-2 mb-6 bg-[var(--tt-canvas)]/85 backdrop-blur supports-[backdrop-filter]:bg-[var(--tt-canvas)]/60 border-b border-[var(--tt-border)]">
