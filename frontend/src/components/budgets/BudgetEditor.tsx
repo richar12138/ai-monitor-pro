@@ -101,7 +101,58 @@ export default function BudgetEditor({
 
   const update = (id: string, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const remove = (id: string) => setRows((rs) => rs.filter((r) => r.id !== id));
+  // Build the canonical budget set from a row list, PUT it, and reseat local
+  // state from the server response (picks up backend-assigned ids). Returns the
+  // number of this-project budgets saved.
+  const persist = async (rowsToSave: Row[]) => {
+    const mine: Budget[] = rowsToSave
+      .map((r) => {
+        const val = parseFloat(r.limit_value);
+        if (!isFinite(val) || val <= 0) return null;
+        const filters = r.agent ? { project: projectPath, agent: r.agent } : { project: projectPath };
+        return {
+          id: r.id.startsWith("tmp-") ? "" : r.id,
+          filters, period: r.period, limit_type: r.limit_type,
+          limit_value: val, thresholds: r.thresholds, enabled: true,
+        } as Budget;
+      })
+      .filter((b): b is Budget => b !== null);
+    const next = await putBudgets([...otherBudgets, ...mine]);
+    const mineSaved: Row[] = [];
+    const others: Budget[] = [];
+    for (const b of next) {
+      if (b.filters.project === projectPath && !b.filters.model) {
+        mineSaved.push({
+          id: b.id, agent: b.filters.agent ?? "", period: b.period,
+          limit_type: b.limit_type, limit_value: String(b.limit_value), thresholds: b.thresholds,
+        });
+      } else {
+        others.push(toBudget(b));
+      }
+    }
+    setRows(mineSaved);
+    setOtherBudgets(others);
+    return mine.length;
+  };
+
+  // Removing a saved budget persists immediately — a delete is a committed
+  // action, not a staged edit (and it must work even if another row is mid-edit
+  // and invalid, which would otherwise disable the Save button). A never-saved
+  // (tmp) row is just dropped locally.
+  const remove = async (id: string) => {
+    const next = rows.filter((r) => r.id !== id);
+    setRows(next);
+    if (id.startsWith("tmp-")) return;
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      await persist(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setRows(rows); // restore on failure
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const addTotal = () =>
     setRows((rs) => [
@@ -117,37 +168,10 @@ export default function BudgetEditor({
   const save = async () => {
     setSaving(true); setError(null); setSaved(false);
     try {
-      const mine: Budget[] = rows
-        .map((r) => {
-          const val = parseFloat(r.limit_value);
-          if (!isFinite(val) || val <= 0) return null;
-          const filters = r.agent ? { project: projectPath, agent: r.agent } : { project: projectPath };
-          return {
-            id: r.id.startsWith("tmp-") ? "" : r.id,
-            filters, period: r.period, limit_type: r.limit_type,
-            limit_value: val, thresholds: r.thresholds, enabled: true,
-          } as Budget;
-        })
-        .filter((b): b is Budget => b !== null);
-      const next = await putBudgets([...otherBudgets, ...mine]);
-      // Re-seat our rows from the canonical saved set (picks up backend-assigned ids).
-      const mineSaved: Row[] = [];
-      const others: Budget[] = [];
-      for (const b of next) {
-        if (b.filters.project === projectPath && !b.filters.model) {
-          mineSaved.push({
-            id: b.id, agent: b.filters.agent ?? "", period: b.period,
-            limit_type: b.limit_type, limit_value: String(b.limit_value), thresholds: b.thresholds,
-          });
-        } else {
-          others.push(toBudget(b));
-        }
-      }
-      setRows(mineSaved);
-      setOtherBudgets(others);
+      const savedCount = await persist(rows);
       setSaved(true);
       // Conversion signal: a budget was actually configured (>=1 saved row).
-      if (mine.length > 0) trackEvent("feature.used", { name: "budget-set" });
+      if (savedCount > 0) trackEvent("feature.used", { name: "budget-set" });
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

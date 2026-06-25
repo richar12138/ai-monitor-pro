@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "tag": "2026-06-24",
+      "title": "Git worktrees, grouped under their project",
+      "highlights": [
+        {
+          "title": "Worktrees roll up to the parent repo",
+          "description": "Work split across git worktrees used to scatter into separate, disconnected project cards with split totals. Each repo now links to its worktrees and shows combined metrics, with a per-worktree breakdown — including deleted worktrees — that adds up to the whole.",
+          "href": "/projects"
+        }
+      ]
+    },
+    {
       "tag": "2026-06-23",
       "title": "Set spend budgets, get alerted at 80% & 100%",
       "highlights": [

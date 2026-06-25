@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Folder, Search, ArrowRight, Wrench, Users, ClipboardList,
   LayoutGrid, List as ListIcon, ArrowUpDown, FolderOpen,
+  GitBranch, ChevronRight,
 } from "lucide-react";
 
 import { useResource } from "@/lib/api";
@@ -16,6 +17,28 @@ import {
   Table, THead, TBody, TR, TH, TD,
 } from "@/components/ui";
 
+interface Tokens { input: number; output: number; cached: number; total: number; cost: number }
+
+interface WorktreeSummary {
+  name: string;
+  path: string;
+  session_count: number;
+  tokens: Tokens;
+  agents: string[];
+  status: string;
+}
+
+interface Aggregate {
+  session_count: number;
+  subagent_count: number;
+  plan_count: number;
+  configured_subagent_count: number;
+  tokens: Tokens;
+  agents: string[];
+  mcp_tools: string[];
+  worktree_count: number;
+}
+
 interface Project {
   name: string;
   path: string;
@@ -25,7 +48,17 @@ interface Project {
   subagent_count: number;
   configured_subagent_count?: number;
   plan_count: number;
-  tokens?: { input: number; output: number; cached: number; total: number; cost: number };
+  tokens?: Tokens;
+  // Git-worktree grouping (added by the backend)
+  canonical_repo?: string;
+  is_worktree?: boolean;
+  worktree_name?: string;
+  parent_path?: string;
+  parent_name?: string;
+  is_repo_root?: boolean;
+  synthesized?: boolean;
+  worktrees?: WorktreeSummary[];
+  aggregate?: Aggregate;
 }
 
 type ViewMode = "grid" | "list";
@@ -174,8 +207,16 @@ export default function ProjectsPage() {
                 <TR key={p.path} interactive>
                   <TD className="pl-5">
                     <Link href={`/projects/${encodeURIComponent(p.path)}`} className="block min-w-0">
-                      <div className="font-semibold text-[var(--tt-fg)] truncate">{p.name}</div>
-                      <div className="font-mono text-[11px] text-[var(--tt-fg-dim)] truncate" title={p.path}>{p.path}</div>
+                      <div className="font-semibold text-[var(--tt-fg)] truncate flex items-center gap-1.5">
+                        {(p.worktrees?.length ?? 0) > 0 && <GitBranch size={12} className="text-[var(--tt-brand)] shrink-0" />}
+                        <span className="truncate">{p.name}</span>
+                        {(p.worktrees?.length ?? 0) > 0 && (
+                          <span className="text-[10px] font-normal text-[var(--tt-fg-dim)]">+{p.worktrees!.length} wt</span>
+                        )}
+                      </div>
+                      <div className="font-mono text-[11px] text-[var(--tt-fg-dim)] truncate" title={p.path}>
+                        {p.is_worktree ? `⑂ ${p.parent_name} · ${p.path}` : p.path}
+                      </div>
                     </Link>
                   </TD>
                   <TD>
@@ -209,16 +250,33 @@ export default function ProjectsPage() {
 
 function ProjectCard({ project }: { project: Project }) {
   const subs = (project.configured_subagent_count ?? 0) + (project.subagent_count ?? 0);
+  const worktrees = project.worktrees ?? [];
+  const hasWorktrees = worktrees.length > 0;
+  const agg = project.aggregate;
+
+  // Headline stats are always this card's OWN (direct) metrics so the grid
+  // stays additive — each worktree is its own card. The rolled-up total is
+  // shown separately (worktrees toggle + project detail page), never as the
+  // headline, to avoid double-counting worktrees that are also cards.
   const tokens = project.tokens?.total ?? 0;
   const cost = project.tokens?.cost ?? 0;
+  const sessionCount = project.session_count;
+  const planCount = project.plan_count || 0;
+  const subCount = subs;
+  // A synthesised hub has no direct agents/tools — borrow the aggregate's.
+  const displayAgents = project.agents.length || !agg ? project.agents : agg.agents;
+  const displayTools = project.mcp_tools.length || !agg ? project.mcp_tools : agg.mcp_tools;
+
+  const [open, setOpen] = useState(false);
+  const href = `/projects/${encodeURIComponent(project.path)}`;
 
   return (
-    <Link href={`/projects/${encodeURIComponent(project.path)}`} className="block group">
-      <Card interactive className="!p-0 h-full flex flex-col overflow-hidden">
+    <Card interactive className="!p-0 h-full flex flex-col overflow-hidden group">
+      <Link href={href} className="block">
         <div className="p-5 flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div className="h-9 w-9 grid place-items-center rounded-[var(--tt-radius)] bg-[var(--tt-brand-glow)] text-[var(--tt-brand)] border border-[color:var(--tt-brand)]/20 shrink-0">
-              <Folder size={16} strokeWidth={2.25} />
+              {hasWorktrees ? <GitBranch size={16} strokeWidth={2.25} /> : <Folder size={16} strokeWidth={2.25} />}
             </div>
             <div className="min-w-0">
               <div className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--tt-fg)] truncate group-hover:text-[var(--tt-brand)] transition-colors" title={project.name}>
@@ -231,48 +289,100 @@ function ProjectCard({ project }: { project: Project }) {
           </div>
           <ArrowRight size={14} className="text-[var(--tt-fg-dim)] group-hover:text-[var(--tt-brand)] group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
         </div>
+      </Link>
 
-        <div className="px-5 pb-3 flex items-center gap-1.5 flex-wrap">
-          {project.agents.slice(0, 5).map((a) => {
-            const meta = getAgent(a);
-            const Icon = meta.icon;
-            return (
-              <span
-                key={a}
-                title={meta.label}
-                className="h-6 w-6 grid place-items-center rounded-md border"
-                style={{ backgroundColor: `${meta.hex}10`, borderColor: `${meta.hex}33`, color: meta.hex }}
-              >
-                <Icon size={12} />
-              </span>
-            );
-          })}
-          {project.agents.length > 5 && (
-            <span className="text-[10px] text-[var(--tt-fg-dim)] ml-1">+{project.agents.length - 5}</span>
+      {/* Worktree-of badge (child cards) */}
+      {project.is_worktree && project.parent_path && (
+        <div className="px-5 pb-2">
+          <Link
+            href={`/projects/${encodeURIComponent(project.parent_path)}`}
+            className="inline-flex items-center gap-1 text-[11px] text-[var(--tt-fg-dim)] hover:text-[var(--tt-brand)] transition-colors"
+          >
+            <GitBranch size={11} /> worktree of <span className="font-medium">{project.parent_name}</span>
+          </Link>
+        </div>
+      )}
+
+      <div className="px-5 pb-3 flex items-center gap-1.5 flex-wrap">
+        {displayAgents.slice(0, 5).map((a) => {
+          const meta = getAgent(a);
+          const Icon = meta.icon;
+          return (
+            <span
+              key={a}
+              title={meta.label}
+              className="h-6 w-6 grid place-items-center rounded-md border"
+              style={{ backgroundColor: `${meta.hex}10`, borderColor: `${meta.hex}33`, color: meta.hex }}
+            >
+              <Icon size={12} />
+            </span>
+          );
+        })}
+        {displayAgents.length > 5 && (
+          <span className="text-[10px] text-[var(--tt-fg-dim)] ml-1">+{displayAgents.length - 5}</span>
+        )}
+      </div>
+
+      {displayTools.length > 0 && (
+        <div className="px-5 pb-4 flex items-center gap-1.5 flex-wrap">
+          <Wrench size={11} className="text-[var(--tt-fg-faint)]" />
+          {displayTools.slice(0, 4).map((t) => (
+            <Badge key={t} variant="outline" size="xs" className="font-mono normal-case">{t}</Badge>
+          ))}
+          {displayTools.length > 4 && (
+            <span className="text-[10px] text-[var(--tt-fg-dim)]">+{displayTools.length - 4}</span>
           )}
         </div>
+      )}
 
-        {project.mcp_tools.length > 0 && (
-          <div className="px-5 pb-4 flex items-center gap-1.5 flex-wrap">
-            <Wrench size={11} className="text-[var(--tt-fg-faint)]" />
-            {project.mcp_tools.slice(0, 4).map((t) => (
-              <Badge key={t} variant="outline" size="xs" className="font-mono normal-case">{t}</Badge>
-            ))}
-            {project.mcp_tools.length > 4 && (
-              <span className="text-[10px] text-[var(--tt-fg-dim)]">+{project.mcp_tools.length - 4}</span>
+      {/* Worktrees navigation (parent cards) */}
+      {hasWorktrees && (
+        <div className="px-5 pb-3">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--tt-fg-muted)] hover:text-[var(--tt-fg)] transition-colors"
+          >
+            <ChevronRight size={12} className={cn("transition-transform", open && "rotate-90")} />
+            {worktrees.length} {worktrees.length === 1 ? "worktree" : "worktrees"}
+            {agg && (
+              <span className="text-[var(--tt-fg-faint)]">
+                · repo total ∑ {formatCost(agg.tokens.cost)}
+              </span>
             )}
-          </div>
-        )}
-
-        <div className="mt-auto grid grid-cols-4 gap-px bg-[var(--tt-border)] border-t border-[var(--tt-border)]">
-          <Stat label="Sessions" value={project.session_count} />
-          <Stat label="Subs"     value={subs}      tone="purple" />
-          <Stat label="Plans"    value={project.plan_count || 0} tone="emerald" />
-          <Stat label="API equiv." value={formatCost(cost)} tone="amber"
-                hint={tokens ? formatTokens(tokens) : undefined} />
+          </button>
+          {open && (
+            <div className="mt-2 space-y-0.5 border-l border-[var(--tt-border)] pl-2">
+              {worktrees.map((w) => (
+                <Link
+                  key={w.path}
+                  href={`/projects/${encodeURIComponent(w.path)}`}
+                  className="flex items-center justify-between gap-2 py-1 px-1.5 rounded text-[11px] text-[var(--tt-fg-muted)] hover:text-[var(--tt-fg)] hover:bg-[color:var(--tt-brand)]/5 transition-colors"
+                >
+                  <span className="font-mono truncate flex items-center gap-1.5" title={w.path}>
+                    <span className="truncate">{w.name}</span>
+                    {w.status !== "active" && (
+                      <span className="shrink-0 text-[9px] uppercase tracking-wide text-[var(--tt-fg-faint)] border border-[var(--tt-border)] rounded px-1" title="Worktree folder no longer on disk">deleted</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 tabular text-[var(--tt-fg-dim)]">
+                    {w.session_count}s · {formatCost(w.tokens.cost)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
-      </Card>
-    </Link>
+      )}
+
+      <div className="mt-auto grid grid-cols-4 gap-px bg-[var(--tt-border)] border-t border-[var(--tt-border)]">
+        <Stat label="Sessions" value={sessionCount} />
+        <Stat label="Subs"     value={subCount}      tone="purple" />
+        <Stat label="Plans"    value={planCount} tone="emerald" />
+        <Stat label="API equiv." value={formatCost(cost)} tone="amber"
+              hint={tokens ? formatTokens(tokens) : undefined} />
+      </div>
+    </Card>
   );
 }
 

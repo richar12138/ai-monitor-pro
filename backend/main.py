@@ -4593,6 +4593,114 @@ async def session_delegation(session_id: str, agent: str):
     return {"supported": False}
 
 
+# ---------------------------------------------------------------------------
+# Git-worktree canonicalisation
+#
+# A single logical repo can be checked out into several git worktrees, each at
+# its own filesystem path (e.g. <repo>/.claude/worktrees/<name>). Every agent
+# tags a session by its raw cwd, so the same repo fragments into many project
+# cards. `canonical_repo()` maps a worktree path back to its main repo root so
+# we can group them — without shelling out to git per session.
+#
+# A worktree's `.git` is a *file* (not a dir) containing
+# `gitdir: <repo>/.git/worktrees/<name>`; the repo root is the grandparent of
+# that worktrees/<name> dir. We read that file directly (cheap, only fires when
+# `.git` is a file). When the worktree dir is gone we fall back to the
+# conventional `.claude|.grok/worktrees/<name>` path shape.
+# ---------------------------------------------------------------------------
+_canonical_repo_cache: Dict[str, str] = {}
+_WORKTREE_PATH_RE = re.compile(r"[/\\]\.(?:claude|grok)[/\\]worktrees[/\\][^/\\]+[/\\]?$")
+
+
+def _repo_root_from_worktree_gitfile(git_file: Path) -> Optional[str]:
+    """Given a worktree's `.git` *file*, return the main repo root, or None."""
+    try:
+        txt = git_file.read_text("utf-8", errors="ignore").strip()
+    except Exception:
+        return None
+    if not txt.startswith("gitdir:"):
+        return None
+    gitdir = Path(txt[len("gitdir:"):].strip())
+    # gitdir == <repo>/.git/worktrees/<name>  ->  repo root is <repo>
+    if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
+        return str(gitdir.parent.parent.parent)
+    return None
+
+
+def canonical_repo(path: str) -> str:
+    """Map a worktree (or a path *inside* a worktree) to its main repo root.
+
+    Walks up the tree to the nearest `.git`. A `.git` *file* means a worktree —
+    resolve to its main repo, so a session run from `<repo>/.claude/worktrees/x`
+    OR from `<repo>/.claude/worktrees/x/backend` both fold to `<repo>`. A `.git`
+    *dir* means the main checkout: the repo root and any plain subdirectory of it
+    are left unchanged (they are the same working tree, not separate worktrees —
+    folding every `frontend/`/`backend/` into the repo is not the intent here).
+    Returns `path` unchanged when no worktree is found. Memoised."""
+    if not path:
+        return path
+    cached = _canonical_repo_cache.get(path)
+    if cached is not None:
+        return cached
+    result = path
+    try:
+        cur = Path(path)
+        for _ in range(40):  # bounded walk-up; real paths are far shallower
+            git = cur / ".git"
+            if git.is_file():
+                result = _repo_root_from_worktree_gitfile(git) or str(cur)
+                break
+            if git.is_dir():
+                break  # main checkout (root or plain subdir) — leave as-is
+            parent = cur.parent
+            if parent == cur:
+                break
+            cur = parent
+        if result == path:
+            # Backstop for a deleted/unreadable worktree that still matches the
+            # conventional in-repo layout (folder gone, so the walk-up found no
+            # .git). Only fires for the <repo>/.claude|.grok/worktrees/<name> shape.
+            m = _WORKTREE_PATH_RE.search(path)
+            if m:
+                result = path[:m.start()]
+    except Exception:
+        result = path
+    _canonical_repo_cache[path] = result
+    return result
+
+
+_worktree_registry_cache: Dict[str, List[str]] = {}
+_GITDIR_TAIL_RE = re.compile(r"[/\\]\.git[/\\]?$")
+
+
+def _repo_worktree_paths(repo: str) -> List[str]:
+    """Every worktree path git has registered for `repo`, read from the repo-side
+    registry `<repo>/.git/worktrees/*/gitdir`.
+
+    This still lists worktrees whose folder was *deleted* (until `git worktree
+    prune` runs), so it recovers the repo link for deleted/external worktrees
+    that `canonical_repo()` (which reads the worktree's own `.git`) cannot."""
+    cached = _worktree_registry_cache.get(repo)
+    if cached is not None:
+        return cached
+    paths: List[str] = []
+    try:
+        wt_dir = Path(repo) / ".git" / "worktrees"
+        if wt_dir.is_dir():
+            for d in wt_dir.iterdir():
+                gd = d / "gitdir"
+                if not gd.is_file():
+                    continue
+                # gitdir points at <worktree>/.git — strip the trailing /.git
+                wp = _GITDIR_TAIL_RE.sub("", gd.read_text("utf-8", errors="ignore").strip())
+                if wp:
+                    paths.append(wp)
+    except Exception:
+        pass
+    _worktree_registry_cache[repo] = paths
+    return paths
+
+
 @app.get("/projects")
 async def get_projects(include_hidden: bool = False):
     sessions = await get_sessions_cached(); projects = {}
@@ -4643,9 +4751,116 @@ async def get_projects(include_hidden: bool = False):
             if agents_dir.exists():
                 p["configured_subagent_count"] += len(list(agents_dir.glob("*/SKILL.md")))
         except Exception: pass
+    # ----- Git-worktree grouping -------------------------------------------
+    # Each worktree keeps its own card (non-destructive: its path stays the
+    # identity used by routes/filters/aliases). We *additionally* tell each
+    # card its canonical repo, then give the main-repo card a list of its
+    # worktrees plus rolled-up "aggregate" metrics. The repo card is
+    # synthesised when the root folder itself has no direct sessions.
+    def _set_worktree(p: dict, repo: str) -> None:
+        p["canonical_repo"] = repo
+        p["is_worktree"] = repo != p["path"]
+        if p["is_worktree"]:
+            # Relative subpath for nested worktrees (e.g. .claude/worktrees/x);
+            # basename for worktrees that live outside the repo dir (siblings).
+            rel = (p["path"][len(repo):].replace("\\", "/").strip("/")
+                   if p["path"].startswith(repo) else "")
+            p["worktree_name"] = rel or p["name"]
+
+    for p in projects.values():
+        _set_worktree(p, canonical_repo(p["path"]))
+
+    # Recovery pass: a worktree whose folder was deleted (and isn't under the
+    # conventional .claude/worktrees layout) can't be resolved from its own
+    # (now-gone) .git file. Git's repo-side registry still knows its path, so
+    # build a worktree->repo index from every discovered repo and re-link any
+    # still-unresolved card whose path git recognises as a worktree.
+    wt_to_repo: Dict[str, str] = {}
+    for repo in {p["canonical_repo"] for p in projects.values()}:
+        for wp in _repo_worktree_paths(repo):
+            wt_to_repo[wp] = repo
+    if wt_to_repo:
+        for p in projects.values():
+            if not p["is_worktree"]:
+                repo = wt_to_repo.get(p["path"].rstrip("/\\"))
+                if repo and repo != p["path"]:
+                    _set_worktree(p, repo)
+
     out = list(projects.values())
     if not include_hidden:
         out = [p for p in out if not p["hidden"]]
+
+    # Group the *visible* cards by canonical repo and link worktrees to parents.
+    visible_by_path = {p["path"]: p for p in out}
+    groups: Dict[str, List[dict]] = {}
+    for p in out:
+        if p["is_worktree"]:
+            groups.setdefault(p["canonical_repo"], []).append(p)
+
+    hidden_set = hidden
+
+    def _aggregate(members: List[dict]) -> dict:
+        agg = {"session_count": 0, "subagent_count": 0, "plan_count": 0,
+               "configured_subagent_count": 0,
+               "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0},
+               "agents": set(), "mcp_tools": set(), "worktree_count": 0}
+        for m in members:
+            agg["session_count"] += m.get("session_count", 0)
+            agg["subagent_count"] += m.get("subagent_count", 0)
+            agg["plan_count"] += m.get("plan_count", 0)
+            agg["configured_subagent_count"] += m.get("configured_subagent_count", 0) or 0
+            for k in ("input", "output", "cached", "total"):
+                agg["tokens"][k] += m.get("tokens", {}).get(k, 0)
+            agg["tokens"]["cost"] += m.get("tokens", {}).get("cost", 0.0)
+            agg["agents"].update(m.get("agents", []))
+            agg["mcp_tools"].update(m.get("mcp_tools", []))
+            if m.get("is_worktree"):
+                agg["worktree_count"] += 1
+        agg["agents"] = sorted(agg["agents"])
+        agg["mcp_tools"] = sorted(agg["mcp_tools"])
+        return agg
+
+    synthesized: List[dict] = []
+    for repo, children in groups.items():
+        children.sort(key=lambda c: c.get("tokens", {}).get("total", 0), reverse=True)
+        wt_summaries = [{
+            "name": c.get("worktree_name") or c["name"],
+            "path": c["path"],
+            "session_count": c["session_count"],
+            "tokens": c["tokens"],
+            "agents": c["agents"],
+            "status": c.get("status", "missing"),
+        } for c in children]
+
+        parent = visible_by_path.get(repo)
+        if parent is None:
+            # Repo root has no direct sessions of its own — synthesise a hub
+            # card. Skip if the root path is explicitly hidden.
+            if repo in hidden_set and not include_hidden:
+                continue
+            try:
+                status = "active" if Path(repo).exists() else "missing"
+            except Exception:
+                status = "missing"
+            parent = {
+                "name": (os.path.basename(repo.replace("\\", "/").rstrip("/")) or repo).strip(),
+                "path": repo, "session_count": 0, "agents": [], "mcp_tools": [],
+                "subagent_count": 0, "plan_count": 0, "configured_subagent_count": 0,
+                "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0, "cost": 0.0},
+                "plans": [], "status": status, "hidden": repo in hidden_set,
+                "canonical_repo": repo, "is_worktree": False, "synthesized": True,
+            }
+            synthesized.append(parent)
+
+        members = [parent] + children
+        parent["is_repo_root"] = True
+        parent["worktrees"] = wt_summaries
+        parent["aggregate"] = _aggregate(members)
+        for c in children:
+            c["parent_path"] = repo
+            c["parent_name"] = parent["name"]
+
+    out.extend(synthesized)
     return out
 
 
