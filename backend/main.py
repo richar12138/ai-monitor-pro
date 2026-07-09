@@ -2617,6 +2617,15 @@ _IDE_CONTEXT_TAG_RE = re.compile(r"<(ide_\w+)>.*?</\1>", re.DOTALL)
 _SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
 
 
+def _strip_context_tags(text: str) -> str:
+    """Remove harness/editor context blocks from a prompt so a preview shows
+    what the user actually typed. Unclosed/malformed tags are left alone —
+    better to show something than nothing."""
+    text = _IDE_CONTEXT_TAG_RE.sub("", text)
+    text = _SYSTEM_REMINDER_RE.sub("", text)
+    return text.strip()
+
+
 def _claude_user_prompt_preview(data: Dict[str, Any], limit: int = 200) -> Optional[str]:
     """Human-typed prompt preview from one Claude Code user JSONL line.
 
@@ -2640,9 +2649,7 @@ def _claude_user_prompt_preview(data: Dict[str, Any], limit: int = 200) -> Optio
         return None
     if not text.strip():
         return None
-    text = _IDE_CONTEXT_TAG_RE.sub("", text)
-    text = _SYSTEM_REMINDER_RE.sub("", text)
-    text = text.strip()
+    text = _strip_context_tags(text)
     if (not text
             or text.startswith("<local-command-")
             or text.startswith("<command-name>")
@@ -3684,6 +3691,12 @@ def _scan_sessions_sync():
                         else:
                             with open(cf, "r", encoding="utf-8", errors="replace") as f:
                                 data = json.load(f)
+                        # VS Code writes a chatSession file the moment the chat
+                        # panel opens; files with no requests are phantom
+                        # sessions — no prompt, no response, no tokens — that
+                        # only pollute the list with empty intents (#129).
+                        if not (data.get("requests") or data.get("pendingRequests")):
+                            continue
                         sid = cf.stem; tokens = {"input": 0, "output": 0, "cached": 0, "total": 0}
                         first_msg = ""; plans = []; model = None
 
@@ -3876,7 +3889,10 @@ def _scan_sessions_sync():
                         except Exception: continue
                         ptype = pdata.get("type")
                         if ptype == "text" and not first_user:
-                            txt = pdata.get("text") or ""
+                            # Editor-context prefixes (<system-reminder>, <ide_*>)
+                            # make useless previews — strip them; if nothing
+                            # remains, keep scanning to the next text part (#129).
+                            txt = _strip_context_tags(pdata.get("text") or "")
                             if txt: first_user = txt
                         if ptype == "tool":
                             tname = pdata.get("tool")

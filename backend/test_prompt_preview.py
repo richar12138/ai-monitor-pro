@@ -6,7 +6,7 @@ the sessions list showed either the tag junk or "No prompt content". The
 preview helper must strip the editor context and surface the typed prompt.
 """
 
-from main import _claude_user_prompt_preview
+from main import _claude_user_prompt_preview, _strip_context_tags
 
 
 def _user_line(content, **extra):
@@ -67,6 +67,14 @@ def test_preview_is_truncated_to_limit():
     long = "x" * 500
     out = _claude_user_prompt_preview(_user_line(long))
     assert out == "x" * 200
+
+
+def test_strip_context_tags_handles_opencode_system_reminder():
+    # OpenCode text parts get the same treatment (e.g. VS Code extension
+    # prefixes "Note: The user opened the file …" reminders).
+    raw = '<system-reminder>Note: The user opened the file "/x/y.py"</system-reminder>\nSummarize it'
+    assert _strip_context_tags(raw) == "Summarize it"
+    assert _strip_context_tags('<system-reminder>only context</system-reminder>') == ""
 
 
 def test_unclosed_tag_falls_back_to_raw_text():
