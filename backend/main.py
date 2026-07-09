@@ -2881,12 +2881,20 @@ def _scan_sessions_sync():
                 # prior_edit_failed = False
                 tool_counts: Dict[str, int] = {}
                 skill_counts: Dict[str, int] = {}
+                last_real_ts = None
                 try:
                     with open(session_file, "r", encoding="utf-8", errors="replace") as f:
                         for line in f:
                             try:
                                 data = json.loads(line)
                             except Exception: continue
+                            # Only user/assistant turns carry their own "timestamp".
+                            # Housekeeping entries appended on reopen (ai-title, mode,
+                            # last-prompt, file-history-snapshot) have none but still
+                            # bump the file's mtime -- falling back to that alone
+                            # would report the session as happening on reopen day.
+                            if data.get("type") in ("user", "assistant") and data.get("timestamp"):
+                                last_real_ts = data["timestamp"]
                             if data.get("type") == "assistant":
                                 msg = data.get("message", {})
                                 m = msg.get("model")
@@ -2953,6 +2961,11 @@ def _scan_sessions_sync():
                                 #     prior_edit_failed = False
                                 #     pending_edit_tool_ids = set()
                 except Exception: continue
+                if last_real_ts:
+                    try:
+                        sess["timestamp"] = datetime.fromisoformat(last_real_ts.replace("Z", "+00:00"))
+                    except ValueError:
+                        pass
                 _attach_tool_usage(sess, tool_counts, skill_counts)
                 # Subagent (Task/Agent) rollup — separate "delegated" bucket so the
                 # parent's own token fields stay exactly as before. Full per-subagent
