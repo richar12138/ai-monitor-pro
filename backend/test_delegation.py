@@ -1016,5 +1016,34 @@ def test_codex_scan_cache_miss_after_real_mtime_change(scan_env, monkeypatch):
     assert sess2["tokens"]["total"] == 450
 
 
+def test_codex_scan_cache_hit_reapplies_alias(scan_env, monkeypatch):
+    """project must never freeze at the cached raw cwd — a cache hit should
+    re-derive it via apply_alias() using the CURRENT alias table, so alias
+    edits made between scans apply retroactively (per plan Global
+    Constraints)."""
+    monkeypatch.setattr(main, "CODEX_DIR", scan_env / ".codex")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    codex_dir = scan_env / ".codex"
+    sid = "019eb056-4eae-7280-8617-000000000003"
+    cwd = "/tmp/proj-cache-alias-test"
+    path = _write_codex_rollout(codex_dir, sid, 0, [
+        _codex_session_meta(cwd=cwd),
+        _codex_token_event("2026-07-01T00:00:00Z", 100, 0, 50),
+    ])
+    mtime = path.stat().st_mtime
+
+    result1 = main._scan_sessions_sync()
+    sess1 = next(s for s in result1 if s["id"] == sid)
+    assert sess1["project"] == cwd
+
+    main.PROJECT_ALIASES_FILE.write_text(json.dumps({cwd: "my-cool-project"}))
+    os.utime(path, (mtime, mtime))  # pin mtime so scan 2 is a cache hit
+
+    result2 = main._scan_sessions_sync()
+    sess2 = next(s for s in result2 if s["id"] == sid)
+    assert sess2["project"] == "my-cool-project"
+    assert "_raw_cwd" not in sess2
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

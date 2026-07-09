@@ -2812,7 +2812,7 @@ def _apply_claude_cache_hit(sess: Dict[str, Any], cached: Dict[str, Any]) -> Non
 _CODEX_CACHE_FIELDS = (
     "tokens", "model", "_provider", "cost", "mcp_tools", "has_plan", "plans",
     "text", "tokens_by_day", "tool_counts", "_skill_counts",
-    "parent_session_id", "subagent_info",
+    "parent_session_id", "subagent_info", "_raw_cwd",
 )
 
 
@@ -3108,6 +3108,7 @@ def _scan_sessions_sync():
             cached = scan_cache.read_cache("codex", sid, source_mtime) if source_mtime is not None else None
             if cached is not None:
                 _apply_codex_cache_hit(sess, cached)
+                sess["project"] = apply_alias(sess.get("_raw_cwd", "unknown"))
                 sess["stub"] = False
                 continue
 
@@ -3120,7 +3121,8 @@ def _scan_sessions_sync():
                                 data = json.loads(line)
                             except Exception: continue
                             if data.get("type") == "session_meta":
-                                sess["project"] = apply_alias(data["payload"].get("cwd", "unknown"))
+                                sess["_raw_cwd"] = data["payload"].get("cwd", "unknown")
+                                sess["project"] = apply_alias(sess["_raw_cwd"])
                                 if not sess.get("model") and data["payload"].get("model"):
                                     sess["model"] = data["payload"].get("model")
                                 if not sess.get("_provider"):
@@ -3236,6 +3238,7 @@ def _scan_sessions_sync():
             if not s.get("model") and s.get("_provider"):
                 s["model"] = s["_provider"]
             s.pop("_provider", None)
+            s.pop("_raw_cwd", None)
             mcp = _mcp_usage_from_counts(s.get("tool_counts") or {})
             if mcp:
                 s["mcp_usage"] = mcp
