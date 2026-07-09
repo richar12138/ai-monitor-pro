@@ -2769,16 +2769,20 @@ def _claude_subagent_usage(session_file: Path, sid: str) -> Optional[Dict[str, A
 
 _CLAUDE_CACHE_FIELDS = (
     "tokens", "model", "cost", "mcp_tools", "has_plan", "plans",
-    "artifacts", "delegation", "delegated_cost",
+    "delegation", "delegated_cost",
 )
 
 
 def _claude_cache_payload(sess: Dict[str, Any]) -> Dict[str, Any]:
     """Snapshot the expensive-to-reparse fields of a fully-parsed Claude
-    session for the sidecar cache. Deliberately excludes `project` (always
-    recomputed fresh so project-alias edits apply retroactively) and `id`/
-    `agent` (known from the cache key already)."""
+    session for the sidecar cache. Deliberately excludes `project` and
+    `artifacts` (always recomputed fresh — `project` so project-alias edits
+    apply retroactively, `artifacts` so Claude Project Memory files added or
+    removed after the last full parse are still reflected) and `id`/`agent`
+    (known from the cache key already)."""
     payload = {k: sess.get(k) for k in _CLAUDE_CACHE_FIELDS}
+    if "delegated_cost" not in sess:
+        payload.pop("delegated_cost", None)
     ts = sess.get("timestamp")
     payload["timestamp"] = ts.isoformat() if isinstance(ts, datetime) else ts
     payload["plans"] = [
@@ -2901,9 +2905,9 @@ def _scan_sessions_sync():
                         break
         except Exception: pass
 
-    # Sort by recency (newest first) BEFORE truncating — insertion-order
-    # slicing previously dropped genuinely recent sessions when totals
-    # exceeded 100.
+    # Sort by recency (newest first) — every discovered session is parsed
+    # (or cache-hit) below, no truncation. Sorting here only affects the
+    # order sessions are processed in, not which ones are included.
     if claude_sessions:
         for sid, sess in sorted(claude_sessions.items(), key=lambda kv: kv[1]["timestamp"], reverse=True):
             session_file = claude_file_map.get(sid)

@@ -856,6 +856,36 @@ def test_claude_scan_cache_hit_serves_stale_content(scan_env, monkeypatch):
     assert second_sess.get("stub") is False
 
 
+def test_claude_scan_cache_hit_still_refreshes_memory_artifacts(scan_env, monkeypatch):
+    """Memory-dir artifacts must be rediscovered fresh on every scan even when
+    the session's own .jsonl is unchanged (a cache hit) — artifacts must not
+    be cached, or newly added memory files silently stop showing up once the
+    session's transcript cache goes warm."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    sid = "sid-cache-artifacts"
+    session_file = make_claude_tree(scan_env / ".claude", sid, with_subagents=False)
+    memory_dir = session_file.parent.parent / "memory"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    (memory_dir / "first.md").write_text("# first\n", encoding="utf-8")
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == sid)
+    assert [a["name"] for a in first_sess["artifacts"]] == ["first.md"]
+
+    st = session_file.stat()
+    original_mtime = st.st_mtime
+    (memory_dir / "second.md").write_text("# second\n", encoding="utf-8")
+    # Pin the session file's own mtime back so the cache stays a hit —
+    # only the memory dir gained a new file, not the transcript.
+    os.utime(session_file, (original_mtime, original_mtime))
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == sid)
+
+    assert second_sess.get("stub") is False
+    assert sorted(a["name"] for a in second_sess["artifacts"]) == ["first.md", "second.md"]
+
+
 def test_claude_scan_cache_miss_after_real_mtime_change(scan_env, monkeypatch):
     """A genuine content change (which naturally bumps mtime) must be
     reflected on the next scan — the cache must not mask real updates."""
