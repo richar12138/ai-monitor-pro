@@ -3233,7 +3233,7 @@ def _scan_sessions_sync():
 
             if source_mtime is not None:
                 scan_cache.write_cache("codex", sid, source_mtime, _codex_cache_payload(sess))
-            sess["stub"] = False
+                sess["stub"] = False
         for s in codex_sessions.values():
             if not s.get("model") and s.get("_provider"):
                 s["model"] = s["_provider"]

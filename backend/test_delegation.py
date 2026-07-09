@@ -193,6 +193,7 @@ def scan_env(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "HERMES_DB", tmp_path / "hermes-state.db")
     monkeypatch.setattr(main, "HERMES_PROFILES_DIR", missing / "hermes-profiles")
     monkeypatch.setattr(main, "PROJECT_ALIASES_FILE", tmp_path / "aliases.json")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
     return tmp_path
 
 
@@ -675,6 +676,26 @@ def test_codex_parsed_session_is_not_stub(scan_env, monkeypatch):
             assert s["stub"] is False
 
 
+def test_codex_index_only_entry_without_rollout_stays_stub(scan_env, monkeypatch):
+    """A session_index.jsonl entry with no matching rollout file on disk
+    (Codex pruned/rotated it away while the index entry lingers) must never
+    be marked as parsed — nothing was actually parsed for it. Regression for
+    the bug where `sess["stub"] = False` ran unconditionally, letting an
+    index-only stub overwrite a real persisted row via the unconditional-
+    overwrite upsert path."""
+    codex_dir = scan_env / ".codex"
+    monkeypatch.setattr(main, "CODEX_DIR", codex_dir)
+    (codex_dir / "sessions").mkdir(parents=True)
+    sid = "019eb056-4eae-7280-8617-000000000099"
+    index_line = json.dumps({"id": sid, "updated_at": "2026-06-10T07:01:46Z",
+                              "thread_name": "orphaned index entry"}) + "\n"
+    (codex_dir / "session_index.jsonl").write_text(index_line)
+
+    result = main._scan_sessions_sync()
+    sess = next(s for s in result if s["id"] == sid)
+    assert sess["stub"] is True
+
+
 def _hist_env(tmp_path, monkeypatch):
     """Isolate history_store at tmp_path and return a fresh module handle."""
     monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
@@ -799,6 +820,27 @@ def test_scan_cache_write_creates_parent_dirs(tmp_path, monkeypatch):
 
     expected_path = scan_cache.cache_path("claude", "sid1")
     assert expected_path.exists()
+
+
+def test_scan_cache_read_rejects_path_traversal_session_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    result = scan_cache.read_cache("claude", "../../../etc/passwd", source_mtime=1000.0)
+
+    assert result is None
+
+
+def test_scan_cache_write_rejects_path_traversal_session_id(tmp_path, monkeypatch):
+    data_dir_path = tmp_path / "tt_data"
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(data_dir_path))
+
+    scan_cache.write_cache("claude", "../../../etc/passwd", source_mtime=1000.0, payload={"model": "x"})
+
+    # No-op: nothing written inside the cache dir, and nothing escaped it.
+    assert not (data_dir_path / "cache").exists()
+    assert not (tmp_path / "etc" / "passwd.json").exists()
+    escaped = tmp_path.parent / "etc" / "passwd.json"
+    assert not escaped.exists()
 
 
 def test_claude_scan_has_no_100_cap(scan_env, monkeypatch):
