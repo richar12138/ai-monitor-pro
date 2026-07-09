@@ -673,5 +673,75 @@ def test_codex_parsed_session_is_not_stub(scan_env, monkeypatch):
             assert s["stub"] is False
 
 
+def _hist_env(tmp_path, monkeypatch):
+    """Isolate history_store at tmp_path and return a fresh module handle."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+    import importlib
+    import history_store
+    importlib.reload(history_store)
+    return history_store
+
+
+def test_upsert_stub_does_not_crush_real_row(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    real = {"agent": "claude", "id": "s1", "project": "/p", "model": "claude-opus-4-8",
+            "timestamp": "2026-06-01T00:00:00+00:00", "cost": 4.2,
+            "tokens": {"input": 100, "output": 50, "cached": 1000, "total": 1150,
+                       "_cached_sum": 3000}}
+    assert hs.upsert_sessions([real]) == 1
+    stub = {"agent": "claude", "id": "s1", "project": "unknown", "model": None,
+            "timestamp": "2026-06-02T00:00:00+00:00", "cost": 0.0,
+            "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "stub": True}
+    assert hs.upsert_sessions([stub]) == 1
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT model, input, output, cached, cache_reads, total, "
+                          "cost, project, last_seen_at, source_present "
+                          "FROM sessions WHERE agent=? AND id=?", ("claude", "s1")).fetchone()
+    finally:
+        con.close()
+    assert row["model"] == "claude-opus-4-8"
+    assert row["input"] == 100 and row["output"] == 50 and row["cached"] == 1000
+    assert row["cache_reads"] == 3000 and row["total"] == 1150
+    assert row["cost"] == 4.2 and row["project"] == "/p"
+    assert row["source_present"] == 1
+    assert row["last_seen_at"] is not None
+
+
+def test_upsert_brand_new_stub_still_inserts(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    stub = {"agent": "codex", "id": "new1", "project": "unknown", "model": None,
+            "timestamp": "2026-06-02T00:00:00+00:00", "cost": 0.0,
+            "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "stub": True}
+    assert hs.upsert_sessions([stub]) == 1
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT input, total, source_present FROM sessions "
+                          "WHERE agent=? AND id=?", ("codex", "new1")).fetchone()
+    finally:
+        con.close()
+    assert row is not None and row["input"] == 0 and row["total"] == 0
+    assert row["source_present"] == 1
+
+
+def test_upsert_nonstub_default_still_overwrites(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    v1 = {"agent": "claude", "id": "s2", "model": "m1",
+          "timestamp": "2026-06-01T00:00:00+00:00", "cost": 1.0,
+          "tokens": {"input": 10, "output": 5, "cached": 0, "total": 15}}
+    v2 = {"agent": "claude", "id": "s2", "model": "m2",
+          "timestamp": "2026-06-02T00:00:00+00:00", "cost": 2.0,
+          "tokens": {"input": 20, "output": 5, "cached": 0, "total": 25}}
+    hs.upsert_sessions([v1]); hs.upsert_sessions([v2])
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT model, input, total, cost FROM sessions "
+                          "WHERE agent=? AND id=?", ("claude", "s2")).fetchone()
+    finally:
+        con.close()
+    assert row["model"] == "m2" and row["input"] == 20 and row["total"] == 25
+    assert row["cost"] == 2.0
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

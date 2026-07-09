@@ -186,32 +186,49 @@ def upsert_sessions(rows: Sequence[Dict[str, Any]]) -> int:
                 # value equals today's. Explicit membership, not `or`, so a
                 # legitimately-zero `_cached_sum` is never masked by `cached`.
                 cache_reads = tok["_cached_sum"] if "_cached_sum" in tok else tok.get("cached", 0)
-                con.execute(
+                # A stub row is a session we discovered on disk but did NOT fully
+                # parse this scan (e.g. its sidecar cache was cold and we chose
+                # not to reparse, or it's brand-new and unseen). Its zero-value
+                # rollup must never overwrite a previously-persisted real one, so
+                # its DO UPDATE SET touches only liveness columns. INSERT is
+                # identical to the real path, so a genuinely-new stub still lands
+                # as a zero-value row rather than being dropped.
+                if r.get("stub", False):
+                    conflict_clause = """
+                        ON CONFLICT(agent, id) DO UPDATE SET
+                            last_seen_at=excluded.last_seen_at,
+                            source_present=1
                     """
+                else:
+                    conflict_clause = """
+                        ON CONFLICT(agent, id) DO UPDATE SET
+                            project=excluded.project,
+                            model=excluded.model,
+                            provider=excluded.provider,
+                            endpoint=excluded.endpoint,
+                            billing_mode=excluded.billing_mode,
+                            first_ts=MIN(sessions.first_ts, excluded.first_ts),
+                            last_ts=MAX(sessions.last_ts, excluded.last_ts),
+                            input=excluded.input,
+                            output=excluded.output,
+                            cached=excluded.cached,
+                            cache_reads=excluded.cache_reads,
+                            total=excluded.total,
+                            cost=excluded.cost,
+                            tok_per_sec=excluded.tok_per_sec,
+                            ecosystem_json=excluded.ecosystem_json,
+                            last_seen_at=excluded.last_seen_at,
+                            source_present=1
+                    """
+                con.execute(
+                    f"""
                     INSERT INTO sessions (
                         agent, id, project, model, provider, endpoint, billing_mode,
                         first_ts, last_ts, input, output, cached, cache_reads, total, cost,
                         tok_per_sec, ecosystem_json, first_seen_at, last_seen_at,
                         source_present
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
-                    ON CONFLICT(agent, id) DO UPDATE SET
-                        project=excluded.project,
-                        model=excluded.model,
-                        provider=excluded.provider,
-                        endpoint=excluded.endpoint,
-                        billing_mode=excluded.billing_mode,
-                        first_ts=MIN(sessions.first_ts, excluded.first_ts),
-                        last_ts=MAX(sessions.last_ts, excluded.last_ts),
-                        input=excluded.input,
-                        output=excluded.output,
-                        cached=excluded.cached,
-                        cache_reads=excluded.cache_reads,
-                        total=excluded.total,
-                        cost=excluded.cost,
-                        tok_per_sec=excluded.tok_per_sec,
-                        ecosystem_json=excluded.ecosystem_json,
-                        last_seen_at=excluded.last_seen_at,
-                        source_present=1
+                    {conflict_clause}
                     """,
                     (
                         r.get("agent"), r.get("id"), r.get("project"), r.get("model"),
