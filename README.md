@@ -1,8 +1,8 @@
-# AI Monitor Pro (AI Monitor Pro)
+# AI Monitor Pro
 
-> **Local observability for AI coding agents AND autonomous agents — Claude Code, Codex, Gemini CLI, Cursor, Copilot, Qwen, OpenCode, Vibe, Antigravity, Grok Build, _and_ Nous Research's Hermes Agent.**
+> **本地 AI Agent 可观测仪表盘 — Token 追踪、成本分析、Skill 监控。支持 Claude Code、Codex、Cursor、Hermes 等主流 AI 编程助手。 | Token telemetry & observability for AI coding agents**
 
-**AI Monitor Pro** (one word: **AI Monitor Pro**) — free, open-source, 100% local.
+**AI Monitor Pro** — 免费、开源、100% 本地运行。你的数据永远不会离开你的机器。
 
 > ☤ **New:** Dedicated **[Hermes Agent](#hermes-agent-autonomous-observability)** dashboard — autonomous-agent observability across 38 platforms (CLI, Telegram, Discord, cron, webhook, …).
 
