@@ -1,11 +1,11 @@
 ## 任务：同步 AI Monitor Pro 上游更新
 
-请定期（建议每周）执行以下操作，将上游 TokenTelemetry 的最新代码合并到 AI Monitor Pro。
+请定期（建议每周）执行以下操作，将上游 AI Monitor Pro 的最新代码合并到 AI Monitor Pro。
 
 ### 手动执行
 
 ```bash
-cd /tmp/tokentelemetry && bash sync-upstream.sh
+cd /tmp/ai-monitor-pro && bash sync-upstream.sh
 ```
 
 ### 或者逐步执行
@@ -26,7 +26,7 @@ powershell -Command "
 Get-ChildItem -Recurse -Include '*.tsx','*.ts','*.js','*.py','*.json','*.md','*.yaml','*.yml','*.html','*.css' |
   Where-Object { \$_.FullName -notmatch '\\\\node_modules\\\\|\\\\dist\\\\|\\\\.git\\\\|\\\\.next\\\\' } |
   ForEach-Object {
-    (Get-Content \$_.FullName -Raw) -replace 'TokenTelemetry','AI Monitor Pro' -replace 'tokentelemetry','ai-monitor-pro' -replace 'VasiHemanth','richar12138' |
+    (Get-Content \$_.FullName -Raw) -replace 'AI Monitor Pro','AI Monitor Pro' -replace 'ai-monitor-pro','ai-monitor-pro' -replace 'richar12138','richar12138' |
     Set-Content \$_.FullName -NoNewline
   }
 "
