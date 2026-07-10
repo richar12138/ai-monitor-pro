@@ -2769,7 +2769,7 @@ def _claude_subagent_usage(session_file: Path, sid: str) -> Optional[Dict[str, A
 
 _CLAUDE_CACHE_FIELDS = (
     "tokens", "model", "cost", "mcp_tools", "has_plan", "plans",
-    "delegation", "delegated_cost",
+    "delegation", "delegated_cost", "tool_counts", "mcp_usage", "skills_used",
 )
 
 
@@ -2779,10 +2779,10 @@ def _claude_cache_payload(sess: Dict[str, Any]) -> Dict[str, Any]:
     `artifacts` (always recomputed fresh — `project` so project-alias edits
     apply retroactively, `artifacts` so Claude Project Memory files added or
     removed after the last full parse are still reflected) and `id`/`agent`
-    (known from the cache key already)."""
-    payload = {k: sess.get(k) for k in _CLAUDE_CACHE_FIELDS}
-    if "delegated_cost" not in sess:
-        payload.pop("delegated_cost", None)
+    (known from the cache key already). Only-if-present (not `.get()`)
+    so sessions with no MCP/skill/delegation signal keep lacking those keys
+    on a cache hit, same as a fresh parse — see `_attach_tool_usage`."""
+    payload = {k: sess[k] for k in _CLAUDE_CACHE_FIELDS if k in sess}
     ts = sess.get("timestamp")
     payload["timestamp"] = ts.isoformat() if isinstance(ts, datetime) else ts
     payload["plans"] = [

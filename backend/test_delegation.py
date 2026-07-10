@@ -876,6 +876,10 @@ def test_claude_scan_cache_hit_serves_stale_content(scan_env, monkeypatch):
     first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == sid)
     first_tokens = dict(first_sess["tokens"])
     first_model = first_sess.get("model")
+    # make_claude_tree gives this session real MCP-tool and Skill signal;
+    # assert it's non-empty so the equality checks below aren't vacuous.
+    assert first_sess.get("mcp_usage")
+    assert first_sess.get("skills_used")
 
     st = session_file.stat()
     original_mtime = st.st_mtime
@@ -897,6 +901,9 @@ def test_claude_scan_cache_hit_serves_stale_content(scan_env, monkeypatch):
     assert second_sess["tokens"] == first_tokens
     assert second_sess.get("model") == first_model
     assert second_sess.get("stub") is False
+    assert second_sess.get("mcp_usage") == first_sess.get("mcp_usage")
+    assert second_sess.get("skills_used") == first_sess.get("skills_used")
+    assert second_sess.get("tool_counts") == first_sess.get("tool_counts")
 
 
 def test_claude_scan_cache_hit_still_refreshes_memory_artifacts(scan_env, monkeypatch):
