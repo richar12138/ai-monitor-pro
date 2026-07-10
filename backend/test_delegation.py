@@ -16,12 +16,14 @@ import os
 import sqlite3
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 import main  # noqa: E402
+import scan_cache  # noqa: E402
 
 SID = "11111111-2222-3333-4444-555555555555"
 PROJ = "-tmp-proj"
@@ -191,6 +193,7 @@ def scan_env(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "HERMES_DB", tmp_path / "hermes-state.db")
     monkeypatch.setattr(main, "HERMES_PROFILES_DIR", missing / "hermes-profiles")
     monkeypatch.setattr(main, "PROJECT_ALIASES_FILE", tmp_path / "aliases.json")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
     return tmp_path
 
 
@@ -656,6 +659,522 @@ def test_subagent_trace_endpoint(scan_env):
     # Path traversal is rejected before any filesystem access.
     assert _run(main.session_subagent_trace(SID, "../../../etc/passwd", "claude")) == {"error": "Invalid subagent id"}
     assert _run(main.session_subagent_trace(SID, "one", "gemini")) == {"error": "Invalid agent"}
+
+
+def test_claude_parsed_session_is_not_stub(scan_env):
+    make_claude_tree(scan_env / ".claude")
+    s = [s for s in main._scan_sessions_sync() if s["agent"] == "claude"][0]
+    assert s["stub"] is False
+
+
+def test_codex_parsed_session_is_not_stub(scan_env, monkeypatch):
+    codex_dir = scan_env / ".codex"
+    monkeypatch.setattr(main, "CODEX_DIR", codex_dir)
+    _make_codex_tree(codex_dir)
+    for s in main._scan_sessions_sync():
+        if s["agent"] == "codex":
+            assert s["stub"] is False
+
+
+def test_codex_index_only_entry_without_rollout_stays_stub(scan_env, monkeypatch):
+    """A session_index.jsonl entry with no matching rollout file on disk
+    (Codex pruned/rotated it away while the index entry lingers) must never
+    be marked as parsed — nothing was actually parsed for it. Regression for
+    the bug where `sess["stub"] = False` ran unconditionally, letting an
+    index-only stub overwrite a real persisted row via the unconditional-
+    overwrite upsert path."""
+    codex_dir = scan_env / ".codex"
+    monkeypatch.setattr(main, "CODEX_DIR", codex_dir)
+    (codex_dir / "sessions").mkdir(parents=True)
+    sid = "019eb056-4eae-7280-8617-000000000099"
+    index_line = json.dumps({"id": sid, "updated_at": "2026-06-10T07:01:46Z",
+                              "thread_name": "orphaned index entry"}) + "\n"
+    (codex_dir / "session_index.jsonl").write_text(index_line)
+
+    result = main._scan_sessions_sync()
+    sess = next(s for s in result if s["id"] == sid)
+    assert sess["stub"] is True
+
+
+def _hist_env(tmp_path, monkeypatch):
+    """Isolate history_store at tmp_path and return a fresh module handle."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+    import importlib
+    import history_store
+    importlib.reload(history_store)
+    return history_store
+
+
+def test_upsert_stub_does_not_crush_real_row(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    real = {"agent": "claude", "id": "s1", "project": "/p", "model": "claude-opus-4-8",
+            "timestamp": "2026-06-01T00:00:00+00:00", "cost": 4.2,
+            "tokens": {"input": 100, "output": 50, "cached": 1000, "total": 1150,
+                       "_cached_sum": 3000}}
+    assert hs.upsert_sessions([real]) == 1
+    stub = {"agent": "claude", "id": "s1", "project": "unknown", "model": None,
+            "timestamp": "2026-06-02T00:00:00+00:00", "cost": 0.0,
+            "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "stub": True}
+    assert hs.upsert_sessions([stub]) == 1
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT model, input, output, cached, cache_reads, total, "
+                          "cost, project, last_seen_at, source_present "
+                          "FROM sessions WHERE agent=? AND id=?", ("claude", "s1")).fetchone()
+    finally:
+        con.close()
+    assert row["model"] == "claude-opus-4-8"
+    assert row["input"] == 100 and row["output"] == 50 and row["cached"] == 1000
+    assert row["cache_reads"] == 3000 and row["total"] == 1150
+    assert row["cost"] == 4.2 and row["project"] == "/p"
+    assert row["source_present"] == 1
+    assert row["last_seen_at"] is not None
+
+
+def test_upsert_brand_new_stub_still_inserts(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    stub = {"agent": "codex", "id": "new1", "project": "unknown", "model": None,
+            "timestamp": "2026-06-02T00:00:00+00:00", "cost": 0.0,
+            "tokens": {"input": 0, "output": 0, "cached": 0, "total": 0}, "stub": True}
+    assert hs.upsert_sessions([stub]) == 1
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT input, total, source_present FROM sessions "
+                          "WHERE agent=? AND id=?", ("codex", "new1")).fetchone()
+    finally:
+        con.close()
+    assert row is not None and row["input"] == 0 and row["total"] == 0
+    assert row["source_present"] == 1
+
+
+def test_upsert_nonstub_default_still_overwrites(tmp_path, monkeypatch):
+    hs = _hist_env(tmp_path, monkeypatch)
+    v1 = {"agent": "claude", "id": "s2", "model": "m1",
+          "timestamp": "2026-06-01T00:00:00+00:00", "cost": 1.0,
+          "tokens": {"input": 10, "output": 5, "cached": 0, "total": 15}}
+    v2 = {"agent": "claude", "id": "s2", "model": "m2",
+          "timestamp": "2026-06-02T00:00:00+00:00", "cost": 2.0,
+          "tokens": {"input": 20, "output": 5, "cached": 0, "total": 25}}
+    hs.upsert_sessions([v1]); hs.upsert_sessions([v2])
+    con = hs._connect()
+    try:
+        row = con.execute("SELECT model, input, total, cost FROM sessions "
+                          "WHERE agent=? AND id=?", ("claude", "s2")).fetchone()
+    finally:
+        con.close()
+    assert row["model"] == "m2" and row["input"] == 20 and row["total"] == 25
+    assert row["cost"] == 2.0
+
+
+def test_scan_cache_miss_when_no_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    result = scan_cache.read_cache("claude", "no-such-session", source_mtime=1000.0)
+
+    assert result is None
+
+
+def test_scan_cache_write_then_read_hit(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    payload = {"model": "x", "tokens": {"total": 5}}
+    scan_cache.write_cache("claude", "sid1", source_mtime=1000.0, payload=payload)
+
+    result = scan_cache.read_cache("claude", "sid1", source_mtime=1000.0)
+
+    assert result is not None
+    assert result["model"] == "x"
+    assert result["tokens"] == {"total": 5}
+
+
+def test_scan_cache_miss_when_stale(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    scan_cache.write_cache("claude", "sid1", source_mtime=1000.0, payload={"model": "x"})
+
+    result = scan_cache.read_cache("claude", "sid1", source_mtime=2000.0)
+
+    assert result is None
+
+
+def test_scan_cache_miss_on_corrupt_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    path = scan_cache.cache_path("claude", "sid1")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("not valid json {{{", encoding="utf-8")
+
+    result = scan_cache.read_cache("claude", "sid1", source_mtime=1000.0)
+
+    assert result is None
+
+
+def test_scan_cache_write_creates_parent_dirs(tmp_path, monkeypatch):
+    data_dir_path = tmp_path / "tt_data"
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(data_dir_path))
+
+    assert not (data_dir_path / "cache").exists()
+    assert not (data_dir_path / "cache" / "claude").exists()
+
+    scan_cache.write_cache("claude", "sid1", source_mtime=1000.0, payload={"model": "x"})
+
+    expected_path = scan_cache.cache_path("claude", "sid1")
+    assert expected_path.exists()
+
+
+def test_scan_cache_read_rejects_path_traversal_session_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    result = scan_cache.read_cache("claude", "../../../etc/passwd", source_mtime=1000.0)
+
+    assert result is None
+
+
+def test_scan_cache_write_rejects_path_traversal_session_id(tmp_path, monkeypatch):
+    data_dir_path = tmp_path / "tt_data"
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(data_dir_path))
+
+    scan_cache.write_cache("claude", "../../../etc/passwd", source_mtime=1000.0, payload={"model": "x"})
+
+    # No-op: nothing written inside the cache dir, and nothing escaped it.
+    assert not (data_dir_path / "cache").exists()
+    assert not (tmp_path / "etc" / "passwd.json").exists()
+    escaped = tmp_path.parent / "etc" / "passwd.json"
+    assert not escaped.exists()
+
+
+def test_claude_scan_has_no_100_cap(scan_env, monkeypatch):
+    """Every discovered Claude session must be parsed (or cache-hit) — never
+    left as a permanent zero-value stub because of the old [:100] slice."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    total = 120
+    for i in range(total):
+        sid = f"sid-{i:04d}"
+        make_claude_tree(scan_env / ".claude", sid, with_subagents=False)
+
+    sessions = main._scan_sessions_sync()
+    claude_sessions = [s for s in sessions if s["agent"] == "claude"]
+
+    assert len(claude_sessions) > 100, f"expected >100 claude sessions, got {len(claude_sessions)}"
+    for s in claude_sessions:
+        assert not (s.get("model") is None and s["tokens"]["total"] == 0), (
+            f"session {s['id']} is a permanent stub: model={s.get('model')!r}, "
+            f"tokens={s['tokens']}"
+        )
+        assert s.get("stub") is False
+
+
+def test_claude_scan_cache_hit_serves_stale_content(scan_env, monkeypatch):
+    """If the underlying .jsonl mutates but mtime is pinned back to the value
+    seen on the first scan, the second scan must serve the cached result
+    rather than re-reading the (now different) file content."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    sid = "sid-cache-hit"
+    session_file = make_claude_tree(scan_env / ".claude", sid, with_subagents=False)
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == sid)
+    first_tokens = dict(first_sess["tokens"])
+    first_model = first_sess.get("model")
+    # make_claude_tree gives this session real MCP-tool and Skill signal;
+    # assert it's non-empty so the equality checks below aren't vacuous.
+    assert first_sess.get("mcp_usage")
+    assert first_sess.get("skills_used")
+
+    st = session_file.stat()
+    original_mtime = st.st_mtime
+    with open(session_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "type": "assistant",
+            "timestamp": "2099-01-01T00:00:00Z",
+            "message": {
+                "model": "claude-mutated-model",
+                "usage": {"input_tokens": 999999, "output_tokens": 999999},
+                "content": [],
+            },
+        }) + "\n")
+    os.utime(session_file, (original_mtime, original_mtime))
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == sid)
+
+    assert second_sess["tokens"] == first_tokens
+    assert second_sess.get("model") == first_model
+    assert second_sess.get("stub") is False
+    assert second_sess.get("mcp_usage") == first_sess.get("mcp_usage")
+    assert second_sess.get("skills_used") == first_sess.get("skills_used")
+    assert second_sess.get("tool_counts") == first_sess.get("tool_counts")
+
+
+def test_claude_scan_cache_hit_still_refreshes_memory_artifacts(scan_env, monkeypatch):
+    """Memory-dir artifacts must be rediscovered fresh on every scan even when
+    the session's own .jsonl is unchanged (a cache hit) — artifacts must not
+    be cached, or newly added memory files silently stop showing up once the
+    session's transcript cache goes warm."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    sid = "sid-cache-artifacts"
+    session_file = make_claude_tree(scan_env / ".claude", sid, with_subagents=False)
+    memory_dir = session_file.parent.parent / "memory"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    (memory_dir / "first.md").write_text("# first\n", encoding="utf-8")
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == sid)
+    assert [a["name"] for a in first_sess["artifacts"]] == ["first.md"]
+
+    st = session_file.stat()
+    original_mtime = st.st_mtime
+    (memory_dir / "second.md").write_text("# second\n", encoding="utf-8")
+    # Pin the session file's own mtime back so the cache stays a hit —
+    # only the memory dir gained a new file, not the transcript.
+    os.utime(session_file, (original_mtime, original_mtime))
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == sid)
+
+    assert second_sess.get("stub") is False
+    assert sorted(a["name"] for a in second_sess["artifacts"]) == ["first.md", "second.md"]
+
+
+def test_claude_scan_cache_miss_after_real_mtime_change(scan_env, monkeypatch):
+    """A genuine content change (which naturally bumps mtime) must be
+    reflected on the next scan — the cache must not mask real updates."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    sid = "sid-cache-miss"
+    session_file = make_claude_tree(scan_env / ".claude", sid, with_subagents=False)
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == sid)
+    first_input_tokens = first_sess["tokens"]["input"]
+
+    with open(session_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "type": "assistant",
+            "timestamp": "2099-01-01T00:00:00Z",
+            "message": {
+                "model": "claude-new-turn",
+                "usage": {"input_tokens": 12345, "output_tokens": 1},
+                "content": [],
+            },
+        }) + "\n")
+    # mtime NOT pinned back — real change, real mtime bump
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == sid)
+
+    assert second_sess["tokens"]["input"] == first_input_tokens + 12345
+    assert second_sess.get("stub") is False
+
+
+# --- Codex scan cache / cap removal -----------------------------------------
+
+def _write_codex_rollout(codex_dir, sid: str, seq: int, lines: list[dict]):
+    day = datetime(2026, 7, 1)
+    rollout_dir = codex_dir / "sessions" / f"{day.year:04d}" / f"{day.month:02d}" / f"{day.day:02d}"
+    rollout_dir.mkdir(parents=True, exist_ok=True)
+    path = rollout_dir / f"rollout-2026-07-01T00-00-{seq:02d}-{sid}.jsonl"
+    with open(path, "w", encoding="utf-8") as f:
+        for line in lines:
+            f.write(json.dumps(line) + "\n")
+    return path
+
+
+def _codex_session_meta(cwd="/tmp/proj", model="gpt-5-codex", provider="openai"):
+    return {"type": "session_meta", "payload": {"cwd": cwd, "model": model, "model_provider": provider}}
+
+
+def _codex_token_event(ts, input_tokens, cached, output, reasoning=0, total=None):
+    total = total if total is not None else (input_tokens + output + reasoning)
+    return {
+        "type": "event_msg",
+        "timestamp": ts,
+        "payload": {"type": "token_count", "info": {"total_token_usage": {
+            "input_tokens": input_tokens, "cached_input_tokens": cached,
+            "output_tokens": output, "reasoning_output_tokens": reasoning,
+            "total_tokens": total,
+        }}},
+    }
+
+
+def test_codex_scan_has_no_100_cap(scan_env, monkeypatch):
+    monkeypatch.setattr(main, "CODEX_DIR", scan_env / ".codex")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    codex_dir = scan_env / ".codex"
+    for i in range(115):
+        sid = f"019eb056-4eae-7280-8617-{i:012d}"
+        _write_codex_rollout(codex_dir, sid, i, [
+            _codex_session_meta(),
+            _codex_token_event("2026-07-01T00:00:00Z", 100, 0, 50),
+        ])
+
+    result = main._scan_sessions_sync()
+    codex_sessions = [s for s in result if s.get("agent") == "codex"]
+    assert len(codex_sessions) >= 115
+    stubs = [s for s in codex_sessions
+             if s.get("model") is None and s["tokens"]["total"] == 0 and s.get("stub") is True]
+    assert not stubs
+
+
+def test_codex_scan_cache_hit_serves_stale_content(scan_env, monkeypatch):
+    monkeypatch.setattr(main, "CODEX_DIR", scan_env / ".codex")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    codex_dir = scan_env / ".codex"
+    sid = "019eb056-4eae-7280-8617-000000000001"
+    path = _write_codex_rollout(codex_dir, sid, 0, [
+        _codex_session_meta(),
+        _codex_token_event("2026-07-01T00:00:00Z", 100, 10, 50),
+        {"type": "response_item", "payload": {"type": "function_call", "name": "shell", "arguments": ""}},
+    ])
+
+    result1 = main._scan_sessions_sync()
+    sess1 = next(s for s in result1 if s["id"] == sid)
+    mtime = path.stat().st_mtime
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(_codex_token_event("2026-07-01T00:05:00Z", 999, 0, 999)) + "\n")
+    os.utime(path, (mtime, mtime))  # pin mtime back after mutating content
+
+    result2 = main._scan_sessions_sync()
+    sess2 = next(s for s in result2 if s["id"] == sid)
+
+    assert sess2["tokens"] == sess1["tokens"]
+    assert sess2["mcp_tools"] == sess1["mcp_tools"]
+    assert sess2.get("mcp_usage") == sess1.get("mcp_usage")
+    assert sess2.get("skills_used") == sess1.get("skills_used")
+
+
+def test_codex_scan_cache_miss_after_real_mtime_change(scan_env, monkeypatch):
+    monkeypatch.setattr(main, "CODEX_DIR", scan_env / ".codex")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    codex_dir = scan_env / ".codex"
+    sid = "019eb056-4eae-7280-8617-000000000002"
+    path = _write_codex_rollout(codex_dir, sid, 0, [
+        _codex_session_meta(),
+        _codex_token_event("2026-07-01T00:00:00Z", 100, 0, 50),
+    ])
+
+    result1 = main._scan_sessions_sync()
+    sess1 = next(s for s in result1 if s["id"] == sid)
+    assert sess1["tokens"]["total"] == 150
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(_codex_token_event("2026-07-01T00:05:00Z", 300, 0, 150)) + "\n")
+
+    result2 = main._scan_sessions_sync()
+    sess2 = next(s for s in result2 if s["id"] == sid)
+    assert sess2["tokens"]["total"] == 450
+
+
+def test_codex_scan_cache_hit_reapplies_alias(scan_env, monkeypatch):
+    """project must never freeze at the cached raw cwd — a cache hit should
+    re-derive it via apply_alias() using the CURRENT alias table, so alias
+    edits made between scans apply retroactively (per plan Global
+    Constraints)."""
+    monkeypatch.setattr(main, "CODEX_DIR", scan_env / ".codex")
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    codex_dir = scan_env / ".codex"
+    sid = "019eb056-4eae-7280-8617-000000000003"
+    cwd = "/tmp/proj-cache-alias-test"
+    path = _write_codex_rollout(codex_dir, sid, 0, [
+        _codex_session_meta(cwd=cwd),
+        _codex_token_event("2026-07-01T00:00:00Z", 100, 0, 50),
+    ])
+    mtime = path.stat().st_mtime
+
+    result1 = main._scan_sessions_sync()
+    sess1 = next(s for s in result1 if s["id"] == sid)
+    assert sess1["project"] == cwd
+
+    main.PROJECT_ALIASES_FILE.write_text(json.dumps({cwd: "my-cool-project"}))
+    os.utime(path, (mtime, mtime))  # pin mtime so scan 2 is a cache hit
+
+    result2 = main._scan_sessions_sync()
+    sess2 = next(s for s in result2 if s["id"] == sid)
+    assert sess2["project"] == "my-cool-project"
+    assert "_raw_cwd" not in sess2
+
+
+def test_scan_cache_version_mismatch_is_miss(tmp_path, monkeypatch):
+    """An entry written by a different CACHE_VERSION must read as a miss even
+    when its _mtime is fresh — parser/pricing changes ship as a version bump,
+    and old entries must be reparsed, not served."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    scan_cache.write_cache("claude", "sid1", source_mtime=1000.0, payload={"model": "x"})
+    assert scan_cache.read_cache("claude", "sid1", source_mtime=1000.0) is not None
+
+    path = scan_cache.cache_path("claude", "sid1")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["_version"] = scan_cache.CACHE_VERSION - 1
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    assert scan_cache.read_cache("claude", "sid1", source_mtime=1000.0) is None
+
+
+def test_scan_cache_version_bump_invalidates_old_entries(tmp_path, monkeypatch):
+    """Simulate an app upgrade: entries written before a CACHE_VERSION bump
+    are all misses afterwards, and a rewrite under the new version hits."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    scan_cache.write_cache("codex", "sid2", source_mtime=1000.0, payload={"model": "old"})
+    monkeypatch.setattr(scan_cache, "CACHE_VERSION", scan_cache.CACHE_VERSION + 1)
+
+    assert scan_cache.read_cache("codex", "sid2", source_mtime=1000.0) is None
+    scan_cache.write_cache("codex", "sid2", source_mtime=1000.0, payload={"model": "new"})
+    hit = scan_cache.read_cache("codex", "sid2", source_mtime=1000.0)
+    assert hit is not None and hit["model"] == "new"
+
+
+def test_scan_cache_missing_version_field_is_miss(tmp_path, monkeypatch):
+    """Entries written before the version field existed (or hand-mangled)
+    must be misses, not treated as current."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    path = scan_cache.cache_path("claude", "sid3")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"model": "x", "_mtime": 1000.0}), encoding="utf-8")
+
+    assert scan_cache.read_cache("claude", "sid3", source_mtime=1000.0) is None
+
+
+def test_claude_cache_refreshes_when_subagent_finishes_late(scan_env, monkeypatch):
+    """Delegation usage lives in separate subagent transcript files, so a
+    subagent that finishes AFTER the parent's last write (background agent)
+    must still invalidate the cache — freshness keys on the max mtime across
+    parent + subagent files, not the parent alone."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    session_file = make_claude_tree(scan_env / ".claude")
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == SID)
+    first_delegated = first_sess["delegation"]["delegated_total"]
+    assert first_delegated > 0
+
+    parent_mtime = session_file.stat().st_mtime
+    sub_file = session_file.parent / SID / "subagents" / "agent-two.jsonl"
+    with open(sub_file, "a", encoding="utf-8") as f:
+        f.write(_assistant_line(model="claude-sonnet-4-6", inp=500, out=250,
+                                attribution="general-purpose"))
+    # Parent untouched: only the subagent transcript moved forward.
+    os.utime(session_file, (parent_mtime, parent_mtime))
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == SID)
+    assert second_sess["delegation"]["delegated_total"] > first_delegated
+
+
+def test_sessions_endpoint_strips_stub_flag(scan_env, monkeypatch):
+    """`stub` is scan→persist plumbing; it must not appear in the /sessions
+    API response."""
+    import asyncio
+    make_claude_tree(scan_env / ".claude")
+    # Keep the fire-and-forget history persist away from the real store.
+    monkeypatch.setattr(main, "_persist_history_async", lambda data: None)
+
+    data = asyncio.run(main.get_sessions(fresh=True))
+
+    assert data, "expected at least one session from the fixture tree"
+    assert all("stub" not in s for s in data)
 
 
 if __name__ == "__main__":
