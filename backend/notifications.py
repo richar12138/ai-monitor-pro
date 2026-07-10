@@ -1,7 +1,7 @@
-"""TokenTelemetry notification center: SQLite-backed, app-owned event store.
+"""AI Monitor Pro notification center: SQLite-backed, app-owned event store.
 
-This is the first *persisted user-state* TokenTelemetry writes beyond JSON
-config. It lives in its own database (`~/.tokentelemetry/notifications.db`),
+This is the first *persisted user-state* AI Monitor Pro writes beyond JSON
+config. It lives in its own database (`~/.ai-monitor-pro/notifications.db`),
 separate from `summaries.db`, and is deliberately generic: the `kind` column
 lets any feature post notifications (budget alerts today; "summary ready" /
 "update available" later).
@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-TT_HOME = Path(os.environ.get("TOKENTELEMETRY_HOME") or (Path.home() / ".tokentelemetry"))
+TT_HOME = Path(os.environ.get("TOKENTELEMETRY_HOME") or (Path.home() / ".ai-monitor-pro"))
 _DB_PATH = TT_HOME / "notifications.db"
 
 

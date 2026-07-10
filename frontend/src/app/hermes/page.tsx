@@ -277,7 +277,7 @@ export default function HermesPage() {
       {!loading && hermesSessions.length === 0 && (
         <EmptyState
           title="No Hermes sessions yet"
-          description="Run Hermes Agent locally (state.db lives under $HERMES_HOME, or ~/.hermes by default) to see sessions appear here. TokenTelemetry scans every refresh."
+          description="Run Hermes Agent locally (state.db lives under $HERMES_HOME, or ~/.hermes by default) to see sessions appear here. AI Monitor Pro scans every refresh."
         />
       )}
 

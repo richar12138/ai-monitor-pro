@@ -2,13 +2,13 @@
 
 - **Status:** Proposed
 - **Date:** 2026-06-16
-- **Deciders:** @VasiHemanth
+- **Deciders:** @richar12138
 - **Related:** [design doc](../design/documentation-site.md)
 
 ## Context
 
 `website/` is a Next.js 16 marketing site exported statically (`output: "export"`)
-to GitHub Pages on `tokentelemetry.com`. It markets the product but doesn't teach
+to GitHub Pages on `github.com/richar12138/ai-monitor-pro`. It markets the product but doesn't teach
 it: there is no per-feature documentation and no place to surface community-built
 blocks (skills, hooks, MCP servers, workflows). The product itself runs locally
 (`frontend/` on `localhost`), so the audience that most needs feature docs —
@@ -23,7 +23,7 @@ strongest long-tail SEO asset, so where they live affects discoverability.
 ## Decision
 
 We will build documentation with **Fumadocs**, added as a route group inside the
-existing `website/` app, served from **GitHub Pages at `tokentelemetry.com/docs`
+existing `website/` app, served from **GitHub Pages at `github.com/richar12138/ai-monitor-pro/docs`
 and `/resources`** (a subdirectory, not a subdomain). Content is **MDX, one file
 per feature**; search is a **prebuilt Orama static index**; feature videos are
 **YouTube/Loom embeds**, not committed files. The locally-running `frontend/`
@@ -32,7 +32,7 @@ matching hosted page — the app never bundles a copy of the docs.
 
 ## Alternatives considered
 
-- **Subdomain `docs.tokentelemetry.com`** — rejected: search engines treat a
+- **Subdomain `docs.github.com/richar12138/ai-monitor-pro`** — rejected: search engines treat a
   subdomain as a largely separate site, so it starts SEO from zero instead of
   inheriting the main domain's authority; also adds DNS/CNAME work, splits
   analytics, and risks visual drift from the marketing site. Only worth it if docs

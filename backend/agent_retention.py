@@ -2,7 +2,7 @@
 
 Coding agents prune their own on-disk transcripts on different schedules. The
 Settings page surfaces each agent's default so a user understands *why* old
-sessions vanish from analytics — and can opt into having TokenTelemetry keep a
+sessions vanish from analytics — and can opt into having AI Monitor Pro keep a
 durable copy (tier-2 archive in ``history_store``) past that window.
 
 The numbers below are the **published defaults** at time of writing (verified
@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional
 
 from tt_paths import data_dir
 
-_log = logging.getLogger("tokentelemetry.retention")
+_log = logging.getLogger("ai-monitor-pro.retention")
 
 HOME = Path.home()
 RETENTION_FILE = data_dir() / "retention.json"

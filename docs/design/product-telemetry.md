@@ -1,7 +1,7 @@
 # Design: Privacy-respecting product telemetry
 
 **Status:** BUILT & DEPLOYED · **Author:** analysis · **Date:** 2026-06-15
-**Related:** [[local-first-no-user-network]] principle · website CRO analysis (`tokentelemetry-cro-analysis.md`) · `harness_config.py` preference pattern · update-check (the only prior outbound call)
+**Related:** [[local-first-no-user-network]] principle · website CRO analysis (`ai-monitor-pro-cro-analysis.md`) · `harness_config.py` preference pattern · update-check (the only prior outbound call)
 
 ---
 
@@ -16,7 +16,7 @@ is blind.
 This collides head-on with the product's defining promise, repeated on the site and
 in the privacy policy:
 
-> "100% local and read-only … never sends your usage data anywhere … TokenTelemetry
+> "100% local and read-only … never sends your usage data anywhere … AI Monitor Pro
 > has no usage-telemetry endpoint."
 
 **Any telemetry weakens that sentence.** The whole design is about how to learn what
@@ -28,7 +28,7 @@ engagement). That audience verifies claims and punishes betrayal.
 ### The cautionary tale we must not repeat
 In **April 2026 the GitHub CLI switched on _opt-out_ (default-on) telemetry** and took
 sustained public criticism (The Register, developer blogs, "DO_NOT_TRACK" threads).
-For a tool literally named *TokenTelemetry* whose pitch is "nothing leaves your
+For a tool literally named *AI Monitor Pro* whose pitch is "nothing leaves your
 machine," shipping default-on telemetry would be brand suicide. This is the single
 most important constraint below.
 
@@ -155,7 +155,7 @@ frontend (page event, feature.used, …)
 backend/telemetry.py  telemetry.emit()
     │  allowlist-serializes + redacts on the backend before dispatch
     │
-    │  POST https://tt-telemetry-proxy.tokentelemetry.workers.dev/event
+    │  POST https://tt-telemetry-proxy.ai-monitor-pro.workers.dev/event
     ▼
 Cloudflare Worker  (tt-telemetry-proxy)
     │  re-validates event name against allowlist
@@ -167,7 +167,7 @@ env.TELEMETRY.writeDataPoint(…)  →  AE dataset: tt_telemetry
 ```
 
 `DEFAULT_PROXY_URL` in `backend/telemetry.py` is set to
-`https://tt-telemetry-proxy.tokentelemetry.workers.dev`. No key, no credentials,
+`https://tt-telemetry-proxy.ai-monitor-pro.workers.dev`. No key, no credentials,
 no DNS record to manage — the Worker is already deployed.
 
 ### Schema (AE data point)
@@ -215,7 +215,7 @@ but **default-on (opt-out)** — the user is *informed*, not asked permission.
 
 1. **First-run notice** (one time, like the website cookie banner, dismissible) —
    informs that telemetry is **already on**:
-   > "Anonymous usage stats are **on** to help improve TokenTelemetry — which pages
+   > "Anonymous usage stats are **on** to help improve AI Monitor Pro — which pages
    > and features you use, never your code, prompts, paths, or costs.
    > **[See exactly what]** · **[Keep it on]** · [Turn off]"
    Both "Keep it on" and "Turn off" are equally weighted, visible choices (not a
@@ -266,7 +266,7 @@ but **default-on (opt-out)** — the user is *informed*, not asked permission.
   *verifiable*, per §3.3.
 
 **Cloudflare Worker** (`proxy/`)
-- Deployed to `tt-telemetry-proxy.tokentelemetry.workers.dev`.
+- Deployed to `tt-telemetry-proxy.ai-monitor-pro.workers.dev`.
 - Receives events from the backend bridge, re-validates event names, derives coarse
   country from CF edge, writes to AE via `env.TELEMETRY.writeDataPoint()`.
 - No secret is needed in the app; the Worker binding is account-bound on Cloudflare's
@@ -330,7 +330,7 @@ is never recorded.
 - **Phase 1 — transparency UI:** Settings "Share my stats" / preview panel + first-run
   notice. Honest, infra-free, doubles as the transparency UI.
 - **Phase 2 — AE auto-send behind opt-out:** continuous signal via
-  `tt-telemetry-proxy.tokentelemetry.workers.dev` → `writeDataPoint` → `tt_telemetry`.
+  `tt-telemetry-proxy.ai-monitor-pro.workers.dev` → `writeDataPoint` → `tt_telemetry`.
   Privacy policy updated; no third-party processor to disclose.
 
 All three phases are shipped.
@@ -355,7 +355,7 @@ All three phases are shipped.
 | Question | Decision |
 |---|---|
 | **Consent model** | **Opt-out — ON by default**, with a loud first-run notice + one-click off (§2.1, §5). Strictly anonymous, no personal data (§1b). Choice persisted as `telemetry_notice_ack`. |
-| **Transport / sink** | **Cloudflare Workers Analytics Engine** via `tt-telemetry-proxy.tokentelemetry.workers.dev`. Frontend events bridge through `POST /telemetry/event` on the backend; backend calls `telemetry.emit()` which POSTs to the Worker; Worker writes via `env.TELEMETRY.writeDataPoint()` into dataset `tt_telemetry`. No analytics key ships in the app. |
+| **Transport / sink** | **Cloudflare Workers Analytics Engine** via `tt-telemetry-proxy.ai-monitor-pro.workers.dev`. Frontend events bridge through `POST /telemetry/event` on the backend; backend calls `telemetry.emit()` which POSTs to the Worker; Worker writes via `env.TELEMETRY.writeDataPoint()` into dataset `tt_telemetry`. No analytics key ships in the app. |
 | **First-run discovery** | **One-time first-run notice** stating telemetry is already on, with equal-weight *Keep on* / *Turn off* + *See exactly what*. CI/non-interactive: not shown **and** not emitting. |
 | **Release gate** | **Homepage + `privacy/page.tsx` "we collect nothing / no telemetry endpoint" copy** rewritten to match on-by-default reality (§1a). Shipped with the feature. |
-| **Build status** | **BUILT & DEPLOYED 2026-06-15.** Backend `telemetry.py` + bridge endpoint + redaction test (11/11 pass); frontend lib + first-run notice + Settings "Usage & privacy" card + page/filter emits; Cloudflare Worker deployed to `tt-telemetry-proxy.tokentelemetry.workers.dev`; privacy/FAQ/TrustStrip/llms.txt copy rewritten; `UPDATE.json` entry added. No maintainer steps remaining — the Worker is live and `DEFAULT_PROXY_URL` in `backend/telemetry.py` already points to it. |
+| **Build status** | **BUILT & DEPLOYED 2026-06-15.** Backend `telemetry.py` + bridge endpoint + redaction test (11/11 pass); frontend lib + first-run notice + Settings "Usage & privacy" card + page/filter emits; Cloudflare Worker deployed to `tt-telemetry-proxy.ai-monitor-pro.workers.dev`; privacy/FAQ/TrustStrip/llms.txt copy rewritten; `UPDATE.json` entry added. No maintainer steps remaining — the Worker is live and `DEFAULT_PROXY_URL` in `backend/telemetry.py` already points to it. |

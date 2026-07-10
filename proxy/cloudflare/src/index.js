@@ -1,5 +1,5 @@
 /**
- * TokenTelemetry telemetry sink — Cloudflare Worker → Workers Analytics Engine.
+ * AI Monitor Pro telemetry sink — Cloudflare Worker → Workers Analytics Engine.
  *
  * Why a Worker (still): the app is open-source and runs from source on each
  * user's machine, so any API token shipped in it is extractable. Analytics
@@ -86,7 +86,7 @@ export default {
   async fetch(request, env) {
     // Health check / accidental GET.
     if (request.method !== "POST") {
-      return new Response("tokentelemetry telemetry sink (analytics engine)", { status: 200 });
+      return new Response("ai-monitor-pro telemetry sink (analytics engine)", { status: 200 });
     }
     // Misconfiguration: binding missing. 500 so a deploy mistake is visible in
     // logs, but the app swallows it (fire-and-forget) so users never notice.

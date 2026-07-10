@@ -1,15 +1,15 @@
 cff-version: 1.2.0
-message: "If you use TokenTelemetry in your research or work, please cite it as below."
+message: "If you use AI Monitor Pro in your research or work, please cite it as below."
 type: software
-title: TokenTelemetry
+title: AI Monitor Pro
 abstract: "A free, open-source, 100% local observability dashboard for AI coding agents. Tracks token usage, LLM costs, tool calls, session traces, and reasoning steps across Claude Code, Gemini CLI, OpenAI Codex, Cursor, GitHub Copilot, and more. No signup, no cloud, no telemetry."
 authors:
   - family-names: Vasi
     given-names: Hemanth
-    email: hemanth.vasi1716@gmail.com
+    email: lichengqing@talkweb.com.cn
     orcid: null
-repository-code: https://github.com/VasiHemanth/tokentelemetry
-url: https://tokentelemetry.com
+repository-code: https://github.com/richar12138/ai-monitor-pro
+url: https://github.com/richar12138/ai-monitor-pro
 license: MIT
 version: 1.0.0
 date-released: "2026-04-27"

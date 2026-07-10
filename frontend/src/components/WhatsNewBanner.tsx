@@ -82,7 +82,7 @@ export default function WhatsNewBanner() {
     <>
       <div
         role="status"
-        aria-label="TokenTelemetry update available"
+        aria-label="AI Monitor Pro update available"
         className="relative overflow-hidden border-b border-[var(--tt-brand)]/20 bg-[linear-gradient(90deg,rgba(96,165,250,0.18)_0%,rgba(96,165,250,0.08)_45%,rgba(96,165,250,0.02)_100%)]"
       >
         <div aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-[var(--tt-brand)]" />
@@ -96,7 +96,7 @@ export default function WhatsNewBanner() {
         />
 
         <div className="relative flex items-center gap-3 px-5 sm:px-7 py-2.5 flex-wrap">
-          {/* Headline: "Update available for TokenTelemetry" — single source of
+          {/* Headline: "Update available for AI Monitor Pro" — single source of
               meaning. Bullet details live inside the drawer. */}
           <span className="inline-flex items-center gap-1.5 shrink-0 text-[12.5px] font-semibold text-[var(--tt-fg)]">
             <RefreshCw
@@ -104,7 +104,7 @@ export default function WhatsNewBanner() {
               className="text-[var(--tt-brand)]"
               style={{ animation: "tt-update-spin 3s linear infinite" }}
             />
-            Update available for TokenTelemetry
+            Update available for AI Monitor Pro
           </span>
 
           {/* Spacer pushes the actions to the right when there's room. */}
@@ -157,7 +157,7 @@ export default function WhatsNewBanner() {
             100% { transform: rotate(360deg); }
           }
           @media (prefers-reduced-motion: reduce) {
-            [aria-label="TokenTelemetry update available"] *[style*="tt-update"] {
+            [aria-label="AI Monitor Pro update available"] *[style*="tt-update"] {
               animation: none !important;
             }
           }

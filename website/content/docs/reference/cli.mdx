@@ -1,14 +1,14 @@
 ---
 title: CLI & Environment Reference
-description: Complete table of every CLI flag and environment variable that TokenTelemetry recognizes.
+description: Complete table of every CLI flag and environment variable that AI Monitor Pro recognizes.
 ---
 
-This is the authoritative reference for the TokenTelemetry launcher CLI and every environment variable the launcher and backend recognize. Run it with `./start.sh` (or `node bin/cli.js`) from inside the cloned `tokentelemetry/` folder — there is no global `tokentelemetry` command.
+This is the authoritative reference for the AI Monitor Pro launcher CLI and every environment variable the launcher and backend recognize. Run it with `./start.sh` (or `node bin/cli.js`) from inside the cloned `ai-monitor-pro/` folder — there is no global `ai-monitor-pro` command.
 
 ## Usage
 
 ```bash
-# from inside the tokentelemetry/ folder:
+# from inside the ai-monitor-pro/ folder:
 ./start.sh [options]          # macOS / Linux
 node bin/cli.js [options]     # cross-platform
 ```
@@ -19,7 +19,7 @@ node bin/cli.js [options]     # cross-platform
 | --- | --- | --- | --- |
 | `--port <N>` | `-p` | `3000` | Frontend (Next.js) port |
 | `--api-port <N>` | `-a` | `8000` | Backend (FastAPI) port |
-| `--data-dir <path>` | `-d` | `~/.tokentelemetry` | Where TokenTelemetry stores config and state. Sets `TOKENTELEMETRY_DATA_DIR`. |
+| `--data-dir <path>` | `-d` | `~/.ai-monitor-pro` | Where AI Monitor Pro stores config and state. Sets `TOKENTELEMETRY_DATA_DIR`. |
 | `--host <addr>` | | `127.0.0.1` | Backend bind address. Use `0.0.0.0` (or a specific IP) to expose remotely. |
 | `--allowed-origins <list>` | | _(empty)_ | Comma-separated hosts allowed to load the dashboard from another machine (CORS + Next.js dev origins). |
 | `--auth-token <token>` | | _(auto-generated)_ | Access token required for remote requests. If `--host` is non-loopback and this is omitted, a random token is generated and printed once. |
@@ -55,7 +55,7 @@ node bin/cli.js [options]     # cross-platform
 
 | Variable | Description |
 | --- | --- |
-| `TOKENTELEMETRY_DATA_DIR` | Sets the data directory (used verbatim, no `.tokentelemetry` suffix). `--data-dir` flag wins. |
+| `TOKENTELEMETRY_DATA_DIR` | Sets the data directory (used verbatim, no `.ai-monitor-pro` suffix). `--data-dir` flag wins. |
 | `TT_AUTH_TOKEN` | Access token for remote requests. `--auth-token` flag wins. |
 | `AGENT_HARNESS_NO_OPEN` | Set to any non-empty value to skip auto-opening the browser on startup. |
 | `NEXT_PUBLIC_API_PORT` | Passed to the Next.js dev server to tell the frontend which port the backend is on. Set automatically by the launcher from `--api-port`. |
@@ -66,7 +66,7 @@ node bin/cli.js [options]     # cross-platform
 | Variable | Description |
 | --- | --- |
 | `TOKENTELEMETRY_DATA_DIR` | Data directory, used verbatim. Highest precedence. |
-| `TOKENTELEMETRY_HOME` | Override of the home directory; `.tokentelemetry` is appended as a subfolder. Lower precedence than `TOKENTELEMETRY_DATA_DIR`. |
+| `TOKENTELEMETRY_HOME` | Override of the home directory; `.ai-monitor-pro` is appended as a subfolder. Lower precedence than `TOKENTELEMETRY_DATA_DIR`. |
 | `TT_AUTH_TOKEN` | Access token for the remote-auth gate. Empty string = no token required (set by the launcher when `--insecure-no-auth` is used). |
 | `TT_ALLOWED_ORIGINS` | Comma-separated CORS allowlist. Set by the launcher from `--allowed-origins`. |
 | `TT_REMOTE_CONNECT_URL` | Full URL (with token) printed for the QR code. Set by the launcher. |
@@ -86,4 +86,4 @@ node bin/cli.js [options]     # cross-platform
 | `TT_CODEX_TIMEOUT` | Codex | Request timeout in seconds. Default: `300`. |
 | `TT_OPENAI_COMPAT_TIMEOUT` | OpenAI-compatible | Request timeout in seconds. Default: `120`. |
 | `OPENAI_COMPAT_API_KEY` | OpenAI-compatible | Bearer token for the OpenAI-compatible endpoint. Wins over the value stored in `summarizer.json`. |
-| `OPENAI_COMPAT_USER_AGENT` | OpenAI-compatible | HTTP User-Agent header. Default: `TokenTelemetry/1.0 (+https://github.com/VasiHemanth/tokentelemetry)`. |
+| `OPENAI_COMPAT_USER_AGENT` | OpenAI-compatible | HTTP User-Agent header. Default: `AI Monitor Pro/1.0 (+https://github.com/richar12138/ai-monitor-pro)`. |

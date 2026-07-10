@@ -110,7 +110,7 @@ export function PowerSettings() {
         <div className="space-y-4">
           <p className="text-[12px] leading-relaxed text-[var(--tt-fg-dim)]">
             Models you run locally (Ollama, llama.cpp, vLLM) have no API bill — their cost is electricity.
-            TokenTelemetry estimates it from your machine&apos;s draw under load and your kWh rate.
+            AI Monitor Pro estimates it from your machine&apos;s draw under load and your kWh rate.
           </p>
 
           <div className="grid grid-cols-3 gap-4">

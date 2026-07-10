@@ -48,7 +48,7 @@ export default function Navigation({ isCollapsed, setIsCollapsed }: NavigationPr
         {!isCollapsed && (
           <div className="min-w-0">
             <div className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--tt-fg)] leading-tight">
-              TokenTelemetry
+              AI Monitor Pro
             </div>
             <div className="text-[10px] tracking-[0.18em] uppercase text-[var(--tt-fg-dim)] leading-tight">
               {t("brand.tagline")}

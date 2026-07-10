@@ -167,7 +167,7 @@ export default function BudgetEditor({
         <div>
           <CardTitle><Wallet size={14} className="text-[var(--tt-brand)]" /> Budgets</CardTitle>
           <p className="text-[12px] text-[var(--tt-fg-dim)] mt-0.5">
-            Set a spend limit for this project — overall and per agent. Alerts only; TokenTelemetry never blocks an agent.
+            Set a spend limit for this project — overall and per agent. Alerts only; AI Monitor Pro never blocks an agent.
           </p>
         </div>
       </CardHeader>

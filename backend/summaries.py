@@ -371,7 +371,7 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Config — which backend summarizes, persisted in ~/.tokentelemetry.
+# Config — which backend summarizes, persisted in ~/.ai-monitor-pro.
 # --------------------------------------------------------------------------- #
 def _coerce_openai_compat(raw: Any) -> Dict[str, Any]:
     """Merge a user-supplied openai_compat sub-config over the canonical

@@ -109,7 +109,7 @@ def _is_push(command: str) -> bool:
 
 
 REVIEW_PROMPT = """\
-You are a strict pre-push reviewer for the TokenTelemetry repo. A unified git \
+You are a strict pre-push reviewer for the AI Monitor Pro repo. A unified git \
 diff of `origin/main..HEAD` is below. Review ONLY this diff. Look specifically \
 for regressions that a fast-moving maintainer would miss:
 

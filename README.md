@@ -1,33 +1,33 @@
-# Token Telemetry (TokenTelemetry)
+# AI Monitor Pro (AI Monitor Pro)
 
 > **Local observability for AI coding agents AND autonomous agents — Claude Code, Codex, Gemini CLI, Cursor, Copilot, Qwen, OpenCode, Vibe, Antigravity, Grok Build, _and_ Nous Research's Hermes Agent.**
 
-**Token Telemetry** (one word: **TokenTelemetry**) — free, open-source, 100% local.
+**AI Monitor Pro** (one word: **AI Monitor Pro**) — free, open-source, 100% local.
 
 > ☤ **New:** Dedicated **[Hermes Agent](#hermes-agent-autonomous-observability)** dashboard — autonomous-agent observability across 38 platforms (CLI, Telegram, Discord, cron, webhook, …).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org)
-[![Website](https://img.shields.io/badge/Website-tokentelemetry.com-blue)](https://tokentelemetry.com)
-[![GitHub Stars](https://img.shields.io/github/stars/VasiHemanth/tokentelemetry?style=social)](https://github.com/VasiHemanth/tokentelemetry)
+[![Website](https://img.shields.io/badge/Website-github.com/richar12138/ai-monitor-pro-blue)](https://github.com/richar12138/ai-monitor-pro)
+[![GitHub Stars](https://img.shields.io/github/stars/richar12138/ai-monitor-pro?style=social)](https://github.com/richar12138/ai-monitor-pro)
 
-**TokenTelemetry** is a free, open-source, 100% local observability dashboard that tracks **token usage**, **LLM costs**, **tool calls**, **session traces**, and **reasoning steps** across all your AI coding agents — in one unified place. No signup. No cloud. Your logs never leave your machine.
+**AI Monitor Pro** is a free, open-source, 100% local observability dashboard that tracks **token usage**, **LLM costs**, **tool calls**, **session traces**, and **reasoning steps** across all your AI coding agents — in one unified place. No signup. No cloud. Your logs never leave your machine.
 
-🌐 **Website & Docs:** [https://tokentelemetry.com](https://tokentelemetry.com)  
-🖥️ **macOS/Linux:** `curl -fsSL https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.sh | bash`
-🧰 **Windows:** `irm https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.ps1 | iex`
-🐙 **GitHub:** [github.com/VasiHemanth/tokentelemetry](https://github.com/VasiHemanth/tokentelemetry)
+🌐 **Website & Docs:** [https://github.com/richar12138/ai-monitor-pro](https://github.com/richar12138/ai-monitor-pro)  
+🖥️ **macOS/Linux:** `curl -fsSL https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.sh | bash`
+🧰 **Windows:** `irm https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.ps1 | iex`
+🐙 **GitHub:** [github.com/richar12138/ai-monitor-pro](https://github.com/richar12138/ai-monitor-pro)
 
 ---
 
-## Why TokenTelemetry?
+## Why AI Monitor Pro?
 
 AI coding agents like Claude Code, Gemini CLI, and Codex are powerful — but they burn through tokens fast. **How many tokens did that refactor cost? Which agent is most efficient? What did it actually do?**
 
-TokenTelemetry answers all of that — locally, instantly, for free.
+AI Monitor Pro answers all of that — locally, instantly, for free.
 
-| Problem                                                | TokenTelemetry Solution                     |
+| Problem                                                | AI Monitor Pro Solution                     |
 | ------------------------------------------------------ | ------------------------------------------- |
 | "How much did that Claude Code session cost?"          | Real-time cost tracking per session/project |
 | "What tools did my agent call?"                        | Full waterfall trace of every tool call     |
@@ -39,7 +39,7 @@ TokenTelemetry answers all of that — locally, instantly, for free.
 
 ## Supported Agents
 
-TokenTelemetry reads session logs from these agents automatically.
+AI Monitor Pro reads session logs from these agents automatically.
 
 ### Coding agents
 
@@ -62,7 +62,7 @@ TokenTelemetry reads session logs from these agents automatically.
 | -------------------------------- | --------------------------------------------------------------------------------------- |
 | **Hermes Agent** (Nous Research) | ✅ [Fully supported with a dedicated dashboard](#hermes-agent-autonomous-observability) |
 
-More agents added regularly. [Request support for your agent →](https://github.com/VasiHemanth/tokentelemetry/issues)
+More agents added regularly. [Request support for your agent →](https://github.com/richar12138/ai-monitor-pro/issues)
 
 ---
 
@@ -76,16 +76,16 @@ Hermes Agent isn't a coding agent — it runs across CLI, messaging platforms (T
 - **Skills + memory pages**, **cron health**, **gateway health**, **cost anomaly detection**
 - **Provider-aware pricing** — same model priced correctly across direct / OpenRouter / Together / Fireworks
 
-Run TokenTelemetry on the same host as Hermes — we read `$HERMES_HOME` (or `~/.hermes/` if unset) locally, no remote-DB mode yet.
+Run AI Monitor Pro on the same host as Hermes — we read `$HERMES_HOME` (or `~/.hermes/` if unset) locally, no remote-DB mode yet.
 
 ### Hermes Dashboard plugin (`:9119` → `:3000`)
 
-If you run Hermes's own web dashboard (`hermes dashboard`, port `9119`), install the plugin so TokenTelemetry shows up as a tab inside it — one port to remember, deep-link cards to every TT page.
+If you run Hermes's own web dashboard (`hermes dashboard`, port `9119`), install the plugin so AI Monitor Pro shows up as a tab inside it — one port to remember, deep-link cards to every TT page.
 
 **Standalone install** (recommended — uses Hermes's own plugin manager):
 
 ```bash
-hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin
+hermes plugins install richar12138/ai-monitor-pro-hermes-plugin
 hermes dashboard
 ```
 
@@ -124,20 +124,20 @@ The launcher tab works for every TT page, not just `/hermes` — Analytics, Proj
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://tokentelemetry.com/install.sh | bash
+curl -fsSL https://github.com/richar12138/ai-monitor-pro/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://tokentelemetry.com/install.ps1 | iex
+irm https://github.com/richar12138/ai-monitor-pro/install.ps1 | iex
 ```
 
 ### Option 2: Clone & run
 
 ```bash
-git clone https://github.com/VasiHemanth/tokentelemetry.git
-cd tokentelemetry
+git clone https://github.com/richar12138/ai-monitor-pro.git
+cd ai-monitor-pro
 ./start.sh        # macOS/Linux
 # start.bat       # Windows
 # node bin/cli.js # cross-platform
@@ -159,7 +159,7 @@ Per-project heatmap, tool usage breakdown, agent leaderboard, session timeline.
 
 ### Budgets & Alerts
 
-Set a spend or token limit on any project — monthly, weekly, or rolling 30-day, overall and per agent. Budgets are **observational**: TokenTelemetry tracks this period's spend against your limit but never blocks an agent.
+Set a spend or token limit on any project — monthly, weekly, or rolling 30-day, overall and per agent. Budgets are **observational**: AI Monitor Pro tracks this period's spend against your limit but never blocks an agent.
 
 Set one on the project's **Config** tab — pick dollars or tokens, a period, and the alert thresholds (80% and 100% by default):
 
@@ -198,10 +198,10 @@ Captured plan-mode outputs from Claude Code's `/plan` command and equivalent in 
 
 ## Configuration
 
-TokenTelemetry stores lightweight state in `~/.tokentelemetry/`:
+AI Monitor Pro stores lightweight state in `~/.ai-monitor-pro/`:
 
 ```
-~/.tokentelemetry/
+~/.ai-monitor-pro/
   aliases.json       # Rename/merge project folder paths
   hidden.json        # Hide specific projects from dashboard
   preferences.json   # App preferences (e.g. update check on/off)
@@ -215,24 +215,24 @@ All hand-editable JSON — no database, no config GUI needed.
 ### Choosing where data is stored
 
 Prefer to keep your system drive clear, or isolate dev-tool state on a secondary
-drive? Point TokenTelemetry's data directory anywhere:
+drive? Point AI Monitor Pro's data directory anywhere:
 
 - **Launcher flag** — `start.sh --data-dir /mnt/d/tt-data` (or `-d`). The folder
   is created on first write.
 - **Environment** — set `TOKENTELEMETRY_DATA_DIR=/mnt/d/tt-data` before
   launching. Used verbatim — that exact folder becomes the store (no
-  `.tokentelemetry` suffix appended). An explicit `--data-dir` flag wins over it.
+  `.ai-monitor-pro` suffix appended). An explicit `--data-dir` flag wins over it.
 
 > **Windows cmd.exe tip:** If using quotes around the path, avoid a trailing backslash (e.g. `--data-dir "D:\tt\"`) as `\"` escapes the quote in `cmd.exe`. Use forward slashes or omit the trailing slash instead.
 
 Everything — aliases, hidden projects, preferences, billing/power overrides,
 summaries cache, the update-check stamp — moves together, so a single setting
-relocates *all* state. The default remains `~/.tokentelemetry/`.
+relocates *all* state. The default remains `~/.ai-monitor-pro/`.
 
 ### Privacy & outbound calls
 
 Your AI-usage data — logs, sessions, tokens, costs, prompts, file paths, and
-project names — **never leaves your machine**. TokenTelemetry makes two
+project names — **never leaves your machine**. AI Monitor Pro makes two
 optional outbound calls:
 
 1. **Update check** — about once an hour the dashboard fetches the latest
@@ -248,7 +248,7 @@ optional outbound calls:
    session id that is not linked across launches. It never collects your code,
    prompts, model output, file/directory paths, project names, token counts,
    costs, IP address, or any stable user or device identifier. Full details:
-   [tokentelemetry.com/privacy](https://tokentelemetry.com/privacy) and
+   [github.com/richar12138/ai-monitor-pro/privacy](https://github.com/richar12138/ai-monitor-pro/privacy) and
    Settings → *Usage & privacy* in the app.
 
 **Turning off telemetry:**
@@ -267,7 +267,7 @@ optional outbound calls:
 
 ## Remote Access
 
-TokenTelemetry is **local-first** and binds to `127.0.0.1` by default so that your agent logs, prompts, and costs never leave the machine. Remote access is an opt-in feature with clear security boundaries (loopback is always exempt; non-loopback requests require a token).
+AI Monitor Pro is **local-first** and binds to `127.0.0.1` by default so that your agent logs, prompts, and costs never leave the machine. Remote access is an opt-in feature with clear security boundaries (loopback is always exempt; non-loopback requests require a token).
 
 ### Direct remote / tailnet / LAN access
 
@@ -293,7 +293,7 @@ When you load the dashboard from the remote address (e.g. the Network URL printe
 
 This pattern is common when your agents (and their logs) run on a remote VPS or server and you only have SSH access, or you prefer to keep the dashboard bound to localhost on the remote side.
 
-**On the remote machine** (where the agent logs live — this is required because TokenTelemetry reads files locally):
+**On the remote machine** (where the agent logs live — this is required because AI Monitor Pro reads files locally):
 
 ```bash
 NEXT_PUBLIC_API_BASE=http://localhost:8000 ./start.sh
@@ -318,7 +318,7 @@ This method requires no firewall changes on the remote machine and reuses your e
 ## Project Structure
 
 ```
-tokentelemetry/
+ai-monitor-pro/
   backend/        FastAPI app (Python) — reads agent logs, serves REST API
   frontend/       Next.js 16 dashboard — React UI
   bin/cli.js      Cross-platform launcher
@@ -330,23 +330,23 @@ tokentelemetry/
 
 ## FAQ
 
-**Q: Does TokenTelemetry send any data to the cloud?**  
+**Q: Does AI Monitor Pro send any data to the cloud?**  
 A: Your AI-usage data — logs, sessions, tokens, costs, prompts — never leaves your machine. There are two optional outbound calls: (1) an **update check** that fetches the latest version from GitHub (no usage data), and (2) **anonymous product-usage telemetry** (on by default) that sends content-free signals — pages visited, features used, OS/arch/version, approximate country, detected agent names — but never your code, prompts, costs, paths, or any stable identifier. Turn off telemetry in Settings → *Usage & privacy* or set `DO_NOT_TRACK=1` / `TT_NO_TELEMETRY=1`. Turn off the update check in Settings → *Updates & privacy* or set `TT_NO_UPDATE_CHECK=1`. See [Privacy & outbound calls](#privacy--outbound-calls).
 
 **Q: How does it track Claude Code token usage?**  
-A: Claude Code writes JSONL session logs to `~/.claude/`. TokenTelemetry watches those files and parses token counts, tool calls, and reasoning in real time.
+A: Claude Code writes JSONL session logs to `~/.claude/`. AI Monitor Pro watches those files and parses token counts, tool calls, and reasoning in real time.
 
 **Q: Does it work with multiple agents at the same time?**  
 A: Yes. It detects all supported agents and shows them in a unified dashboard. You can filter by agent, model, or project.
 
-**Q: Is there a cost to use TokenTelemetry?**  
+**Q: Is there a cost to use AI Monitor Pro?**  
 A: No. It is free and open-source under the MIT license.
 
-**Q: How is TokenTelemetry different from Langfuse, LangSmith, or Helicone?**  
-A: Those tools require you to instrument your code, create an account, and send data to their cloud. TokenTelemetry is 100% local, zero-config, and works by reading the log files your agents already write — no SDK, no API key, no cloud.
+**Q: How is AI Monitor Pro different from Langfuse, LangSmith, or Helicone?**  
+A: Those tools require you to instrument your code, create an account, and send data to their cloud. AI Monitor Pro is 100% local, zero-config, and works by reading the log files your agents already write — no SDK, no API key, no cloud.
 
 **Q: Can I monitor Gemini CLI token usage?**  
-A: Yes. TokenTelemetry supports Gemini CLI and shows token counts, costs, and session traces for Google's Gemini models (Gemini 2.0 Flash, Gemini 1.5 Pro, etc.).
+A: Yes. AI Monitor Pro supports Gemini CLI and shows token counts, costs, and session traces for Google's Gemini models (Gemini 2.0 Flash, Gemini 1.5 Pro, etc.).
 
 **Q: Does it support Cursor or GitHub Copilot?**  
 A: Yes. Cursor and GitHub Copilot sessions are detected and tracked.
@@ -357,19 +357,19 @@ A: Yes. Cursor and GitHub Copilot sessions are detected and tracked.
 A: Not really. Hermes ships its own `/usage` + `/insights` and a bundled Langfuse plugin, but no third-party tool treats it as a first-class agent with a dedicated dashboard. Tracking: [`NousResearch/hermes-agent#6642`](https://github.com/NousResearch/hermes-agent/issues/6642).
 
 **Q: Will it work for my Hermes bot on a VPS?**  
-A: Yes — run TokenTelemetry on the same host (it reads local files). See the **[Remote Access](#remote-access)** section above for the two supported methods:
+A: Yes — run AI Monitor Pro on the same host (it reads local files). See the **[Remote Access](#remote-access)** section above for the two supported methods:
 
 - Direct exposure with `--host 0.0.0.0` + token (recommended when the network allows it).
 - SSH tunnel with the correct dual-port forward (`-L 3000:... -L 8000:...`) plus `NEXT_PUBLIC_API_BASE` on the remote (the previously documented single-port command produced a blank dashboard).
 
 **Q: Is "Hermes Agent" the same as the Hermes-3 LLMs?**  
-A: No. Hermes Agent is the [open-source agent framework](https://github.com/NousResearch/hermes-agent); Hermes-3 is a family of fine-tuned models. TokenTelemetry observes the agent — it can be running any model.
+A: No. Hermes Agent is the [open-source agent framework](https://github.com/NousResearch/hermes-agent); Hermes-3 is a family of fine-tuned models. AI Monitor Pro observes the agent — it can be running any model.
 
 ---
 
 ## Comparisons
 
-| Feature             | TokenTelemetry | Langfuse | LangSmith | Helicone |
+| Feature             | AI Monitor Pro | Langfuse | LangSmith | Helicone |
 | ------------------- | -------------- | -------- | --------- | -------- |
 | 100% Local          | ✅             | ❌       | ❌        | ❌       |
 | Zero config         | ✅             | ❌       | ❌        | ❌       |
@@ -390,9 +390,9 @@ There's no other third-party tool built specifically for Hermes Agent.
 | Bundled Langfuse plugin             | ❌ generic    | Either | Langfuse-shaped |
 | Manual `state.db` / `agent.log` parsing | DIY      | ✅     | Build it yourself |
 | Langfuse / LangSmith / Helicone     | ❌ generic    | ❌     | LLM-shaped |
-| **TokenTelemetry**                  | ✅            | ✅     | `/hermes` dashboard |
+| **AI Monitor Pro**                  | ✅            | ✅     | `/hermes` dashboard |
 
-Know of another? [Open an issue](https://github.com/VasiHemanth/tokentelemetry/issues) and we'll update this.
+Know of another? [Open an issue](https://github.com/richar12138/ai-monitor-pro/issues) and we'll update this.
 
 ---
 
@@ -411,7 +411,7 @@ Know of another? [Open an issue](https://github.com/VasiHemanth/tokentelemetry/i
 
 **Port conflicts:** Check/kill processes on ports 3000 and 8000.  
 **Python not found:** Install Python 3.9+ and ensure it's in your PATH.  
-**No sessions showing:** Run an agent (Claude Code, Gemini CLI, etc.) first — TokenTelemetry needs existing log files.  
+**No sessions showing:** Run an agent (Claude Code, Gemini CLI, etc.) first — AI Monitor Pro needs existing log files.  
 **Windows issues:** Run PowerShell as Administrator for the installer.
 
 ---
@@ -421,8 +421,8 @@ Know of another? [Open an issue](https://github.com/VasiHemanth/tokentelemetry/i
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
-git clone https://github.com/VasiHemanth/tokentelemetry.git
-cd tokentelemetry
+git clone https://github.com/richar12138/ai-monitor-pro.git
+cd ai-monitor-pro
 # Make your changes
 git checkout -b feat/your-feature
 git commit -m "feat: your feature"
@@ -430,7 +430,7 @@ git push origin feat/your-feature
 # Open a Pull Request
 ```
 
-Want to add support for a new agent? [Open an issue](https://github.com/VasiHemanth/tokentelemetry/issues) with the agent name and log format.
+Want to add support for a new agent? [Open an issue](https://github.com/richar12138/ai-monitor-pro/issues) with the agent name and log format.
 
 ---
 
@@ -442,27 +442,27 @@ Want to add support for a new agent? [Open an issue](https://github.com/VasiHema
 
 ## License
 
-[MIT](LICENSE) © 2024 [Hemanth Vasi](https://github.com/VasiHemanth)
+[MIT](LICENSE) © 2024 [richar12138](https://github.com/richar12138)
 
 ---
 
 ## Author
 
-**Hemanth Vasi**  
-🌐 [tokentelemetry.com](https://tokentelemetry.com)  
-🐙 [github.com/VasiHemanth](https://github.com/VasiHemanth)  
-🐦 [@VasiHemanth on X](https://twitter.com/VasiHemanth)  
+**richar12138**  
+🌐 [github.com/richar12138/ai-monitor-pro](https://github.com/richar12138/ai-monitor-pro)  
+🐙 [github.com/richar12138](https://github.com/richar12138)  
+🐦 [@richar12138 on X](https://twitter.com/richar12138)  
 💼 [LinkedIn](https://www.linkedin.com/in/vasi-hemanth/)
 
 ## Feedback
 
-Have an idea, found a bug, or just want to share how you're using TokenTelemetry? Two ways in:
+Have an idea, found a bug, or just want to share how you're using AI Monitor Pro? Two ways in:
 
-- 💬 **[GitHub Discussions](https://github.com/VasiHemanth/tokentelemetry/discussions)** — ideas, Q&A, show-and-tell
-- 🐛 **[Issues](https://github.com/VasiHemanth/tokentelemetry/issues)** — bugs and concrete feature requests
+- 💬 **[GitHub Discussions](https://github.com/richar12138/ai-monitor-pro/discussions)** — ideas, Q&A, show-and-tell
+- 🐛 **[Issues](https://github.com/richar12138/ai-monitor-pro/issues)** — bugs and concrete feature requests
 
 There's also a feedback button inside the app (bottom-right of every page).
 
 ---
 
-_If you find TokenTelemetry useful, please ⭐ star this repo — it helps others discover it!_
+_If you find AI Monitor Pro useful, please ⭐ star this repo — it helps others discover it!_

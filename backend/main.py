@@ -144,7 +144,7 @@ def _pid_alive(pid: int) -> bool:
     except (ProcessLookupError, PermissionError, OSError):
         return False
 
-app = FastAPI(title="TokenTelemetry API")
+app = FastAPI(title="AI Monitor Pro API")
 
 # Enable CORS for the Next.js frontend.
 #
@@ -1480,8 +1480,8 @@ import urllib.request as _urlreq
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _TT_HOME = data_dir()
 _UPDATE_CACHE = _TT_HOME / ".update-check.json"
-_REPO_OWNER = "VasiHemanth"
-_REPO_NAME = "tokentelemetry"
+_REPO_OWNER = "richar12138"
+_REPO_NAME = "ai-monitor-pro"
 _UPDATE_CACHE_TTL = 60 * 60       # 1 hour — quick enough that hotfixes
                                   # propagate same-day, infrequent enough to
                                   # not hammer GitHub on dashboard reloads.
@@ -1550,7 +1550,7 @@ def _fetch_remote() -> Optional[Dict[str, Any]]:
     sha_url = f"https://api.github.com/repos/{_REPO_OWNER}/{_REPO_NAME}/commits/main"
     update_url = f"https://raw.githubusercontent.com/{_REPO_OWNER}/{_REPO_NAME}/main/UPDATE.json"
     try:
-        req = _urlreq.Request(sha_url, headers={"User-Agent": "tokentelemetry-update-check"})
+        req = _urlreq.Request(sha_url, headers={"User-Agent": "ai-monitor-pro-update-check"})
         with _urlreq.urlopen(req, timeout=_UPDATE_FETCH_TIMEOUT) as r:
             sha_data = json.loads(r.read().decode("utf-8"))
         latest_sha = sha_data.get("sha")
@@ -1585,7 +1585,7 @@ def _fetch_remote() -> Optional[Dict[str, Any]]:
         return out
 
     try:
-        req2 = _urlreq.Request(update_url, headers={"User-Agent": "tokentelemetry-update-check"})
+        req2 = _urlreq.Request(update_url, headers={"User-Agent": "ai-monitor-pro-update-check"})
         with _urlreq.urlopen(req2, timeout=_UPDATE_FETCH_TIMEOUT) as r:
             upd = json.loads(r.read().decode("utf-8"))
 
@@ -1719,7 +1719,7 @@ async def get_version():
 
 @app.get("/")
 async def root():
-    return {"message": "TokenTelemetry API is running"}
+    return {"message": "AI Monitor Pro API is running"}
 
 def _list_available_agents() -> list:
     agents = []
@@ -1766,7 +1766,7 @@ async def get_available_agents():
 def _scan_grok_sessions() -> List[Dict[str, Any]]:
     """Scan Grok Build sessions under ~/.grok/sessions/.
 
-    Produces the standard TokenTelemetry session record with rich Grok-specific forensics.
+    Produces the standard AI Monitor Pro session record with rich Grok-specific forensics.
     """
     if not GROK_SESSIONS_DIR.exists():
         return []
@@ -3685,7 +3685,7 @@ import time as _time
 from pricing import calculate_cost, PRICING, PRICING_UPDATED
 import logging as _logging
 
-_log = _logging.getLogger("tokentelemetry.cache")
+_log = _logging.getLogger("ai-monitor-pro.cache")
 
 SESSIONS_TTL_SEC = 30.0
 
@@ -4650,7 +4650,7 @@ async def get_projects(include_hidden: bool = False):
 
 
 # ---------------------------------------------------------------------------
-# TokenTelemetry config endpoints (aliases + hidden projects)
+# AI Monitor Pro config endpoints (aliases + hidden projects)
 # ---------------------------------------------------------------------------
 class PathPayload(BaseModel):
     path: str

@@ -1,18 +1,18 @@
 ---
 title: Custom Data Directory
-description: Move TokenTelemetry's config and state to a different directory using --data-dir, TOKENTELEMETRY_DATA_DIR, or TOKENTELEMETRY_HOME.
+description: Move AI Monitor Pro's config and state to a different directory using --data-dir, TOKENTELEMETRY_DATA_DIR, or TOKENTELEMETRY_HOME.
 ---
 
-By default, TokenTelemetry stores all its config and state in `~/.tokentelemetry/`. You can move this to any directory you like — useful for keeping your system drive clear, isolating tool state on a secondary drive, or running multiple independent instances.
+By default, AI Monitor Pro stores all its config and state in `~/.ai-monitor-pro/`. You can move this to any directory you like — useful for keeping your system drive clear, isolating tool state on a secondary drive, or running multiple independent instances.
 
 ## Precedence
 
 Three mechanisms control the data directory location. **First match wins:**
 
 1. `--data-dir <path>` (or `-d <path>`) — launcher flag, highest precedence.
-2. `TOKENTELEMETRY_DATA_DIR=<path>` — environment variable, used verbatim (no `.tokentelemetry` suffix appended).
-3. `TOKENTELEMETRY_HOME=<path>` — environment variable, appends `.tokentelemetry` as a subdirectory under the given path.
-4. Default: `~/.tokentelemetry/`.
+2. `TOKENTELEMETRY_DATA_DIR=<path>` — environment variable, used verbatim (no `.ai-monitor-pro` suffix appended).
+3. `TOKENTELEMETRY_HOME=<path>` — environment variable, appends `.ai-monitor-pro` as a subdirectory under the given path.
+4. Default: `~/.ai-monitor-pro/`.
 
 ## Using the flag
 
@@ -33,9 +33,9 @@ The directory is created on first write. Subsequent launches use the same path i
 export TOKENTELEMETRY_DATA_DIR=/mnt/d/tt-data
 ./start.sh
 
-# Home override (appends .tokentelemetry):
+# Home override (appends .ai-monitor-pro):
 export TOKENTELEMETRY_HOME=/mnt/d
-# → data dir: /mnt/d/.tokentelemetry
+# → data dir: /mnt/d/.ai-monitor-pro
 ./start.sh
 ```
 
@@ -62,10 +62,10 @@ None of these files contain session transcript data by default. `history.db` may
 
 ## Moving an existing data directory
 
-Stop TokenTelemetry, move the directory, then relaunch with the new path:
+Stop AI Monitor Pro, move the directory, then relaunch with the new path:
 
 ```bash
-mv ~/.tokentelemetry /mnt/d/tt-data
+mv ~/.ai-monitor-pro /mnt/d/tt-data
 ./start.sh --data-dir /mnt/d/tt-data
 ```
 
@@ -73,7 +73,7 @@ All your aliases, preferences, summaries, and history move with it.
 
 ## Running multiple instances
 
-To run two independent TokenTelemetry instances (e.g. one per project or one per user on a shared machine), give each a different data directory and different ports:
+To run two independent AI Monitor Pro instances (e.g. one per project or one per user on a shared machine), give each a different data directory and different ports:
 
 ```bash
 # Instance A

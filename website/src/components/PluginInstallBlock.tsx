@@ -4,21 +4,21 @@ import { Copy, Check, Info } from "lucide-react";
 import { track } from "@/lib/track";
 
 const FULL_COMMAND =
-  "curl -fsSL https://tokentelemetry.com/install.sh | bash && hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin && hermes dashboard";
+  "curl -fsSL https://github.com/richar12138/ai-monitor-pro/install.sh | bash && hermes plugins install richar12138/ai-monitor-pro-hermes-plugin && hermes dashboard";
 
 const STEPS: { kicker: string; tagline: string; lines: string[] }[] = [
   {
-    kicker: "1 · Run TokenTelemetry",
+    kicker: "1 · Run AI Monitor Pro",
     tagline: "the engine — port :3000",
     lines: [
-      "curl -fsSL https://tokentelemetry.com/install.sh | bash",
+      "curl -fsSL https://github.com/richar12138/ai-monitor-pro/install.sh | bash",
     ],
   },
   {
     kicker: "2 · Plug it into Hermes Dashboard",
     tagline: "the bridge — port :9119",
     lines: [
-      "hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin",
+      "hermes plugins install richar12138/ai-monitor-pro-hermes-plugin",
       "hermes dashboard",
     ],
   },
@@ -92,7 +92,7 @@ export default function PluginInstallBlock() {
         <Info size={12} className="text-[#eab308] mt-0.5 shrink-0" />
         <p className="text-[11px] text-[var(--tt-fg-muted)] leading-relaxed">
           <strong className="text-[var(--tt-fg)]">The plugin is a launcher, not the engine.</strong>{" "}
-          It opens TokenTelemetry pages inside Hermes Dashboard — but only when TT itself is running. Skip step 1 if you already have TT on
+          It opens AI Monitor Pro pages inside Hermes Dashboard — but only when TT itself is running. Skip step 1 if you already have TT on
           <code className="font-mono text-[var(--tt-fg-muted)] mx-0.5">:3000</code>.
         </p>
       </div>

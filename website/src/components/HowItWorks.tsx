@@ -3,7 +3,7 @@ const STEPS = [
     n: "1",
     title: "Run one command",
     body: "Paste it into your terminal. Installs in seconds, opens automatically — no account, no API keys.",
-    code: <><span className="text-[var(--tt-fg-faint)]">$ </span>curl -fsSL https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.sh | bash</>,
+    code: <><span className="text-[var(--tt-fg-faint)]">$ </span>curl -fsSL https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.sh | bash</>,
   },
   {
     n: "2",
@@ -30,7 +30,7 @@ export default function HowItWorks() {
           No instrumentation. <span className="text-[var(--tt-brand)]">No code changes.</span>
         </h2>
         <p className="mt-3.5 text-[15.5px] text-[var(--tt-fg-muted)] leading-relaxed">
-          Your agents already write logs. TokenTelemetry just reads them — so setup is one line, and there&apos;s
+          Your agents already write logs. AI Monitor Pro just reads them — so setup is one line, and there&apos;s
           nothing to wire into your codebase.
         </p>
       </div>

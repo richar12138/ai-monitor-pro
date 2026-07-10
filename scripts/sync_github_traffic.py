@@ -23,8 +23,8 @@ from google.oauth2.service_account import Credentials
 SPREADSHEET_ID = os.environ["TT_SHEET_ID"]
 
 REPOS_TO_TRACK = {
-    "VasiHemanth/tokentelemetry": "TokenTelemetry",
-    "VasiHemanth/tokentelemetry-hermes-plugin": "Hermes-Plugin",
+    "richar12138/ai-monitor-pro": "AI Monitor Pro",
+    "richar12138/ai-monitor-pro-hermes-plugin": "Hermes-Plugin",
 }
 
 

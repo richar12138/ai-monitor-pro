@@ -1,4 +1,4 @@
-# TokenTelemetry — Claude Code project rules
+# AI Monitor Pro — Claude Code project rules
 
 ## ⚠️ Pre-push policy (enforced by hook)
 
@@ -52,7 +52,7 @@ easy to forget the file, and a stale banner is worse than no banner
       "tag": "(prior releases stay below — drawer shows up to 6 newest)"
     }
   ],
-  "release_url": "https://github.com/VasiHemanth/tokentelemetry/commits/main"
+  "release_url": "https://github.com/richar12138/ai-monitor-pro/commits/main"
 }
 ```
 
@@ -107,7 +107,7 @@ fast remote-access ship), every change destined for `main` passes two gates:
 - **Schedules page is read-only.** The CRUD UI was built but is commented out under `# DISABLED-MUTATIONS:` markers in `backend/main.py`. Re-enable by uncommenting; don't reimplement.
 - **Backend default port: 8000** (matches `bin/cli.js`). The frontend derives its API base from `window.location` + `NEXT_PUBLIC_API_PORT` at runtime (set by `bin/cli.js` from `--api-port`), so a non-default port works automatically. `NEXT_PUBLIC_API_BASE` still works as an explicit override (pin a fixed host) but is no longer required just to change the port. For remote/tailnet access use `--host` / `--allowed-origins` (envs `TT_HOST` / `TT_ALLOWED_ORIGINS`); default stays loopback-only. **Remote access is token-gated:** a non-loopback `--host` auto-generates `TT_AUTH_TOKEN` (printed once at startup) and `backend/main.py`'s `RemoteAuthMiddleware` then requires it on every *remote* request — loopback is always exempt, so the default local experience is unchanged. CORS is **not** the security boundary (it only restrains browsers); the token is. Frontend carries it via `Authorization: Bearer` (and `?token=` for artifact `<img>`/`<a>` loads) — see `frontend/src/lib/api.ts` + `TokenGate.tsx`. Override with `--auth-token`, or disable on a trusted tailnet with `--insecure-no-auth`. The middleware is registered **before** CORS so CORS stays outermost (answers OPTIONS preflight, decorates the 401).
 - **`UPDATE.json` is committed.** It's not generated, not gitignored. Treat it as source code.
-- **Test pollution: clear `~/.tokentelemetry/.update-check.json`** if you manually seed it for testing; the SHA validator added in PR #34 catches obvious garbage but doesn't catch all dev mistakes.
+- **Test pollution: clear `~/.ai-monitor-pro/.update-check.json`** if you manually seed it for testing; the SHA validator added in PR #34 catches obvious garbage but doesn't catch all dev mistakes.
 
 ## Summarizer error handling (never dump raw errors in the UI)
 

@@ -1,17 +1,17 @@
 ---
 title: History & Retention
-description: Configure how long TokenTelemetry keeps session data, enable durable history, and manage transcript archival.
+description: Configure how long AI Monitor Pro keeps session data, enable durable history, and manage transcript archival.
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-By default, TokenTelemetry reads agent session files directly from their log directories on every request. Durable history is an optional mode that caches processed session data in a local SQLite database, enabling longer date ranges in Analytics and the Projects heatmap.
+By default, AI Monitor Pro reads agent session files directly from their log directories on every request. Durable history is an optional mode that caches processed session data in a local SQLite database, enabling longer date ranges in Analytics and the Projects heatmap.
 
 Open **Settings → History & Retention** to configure these options.
 
 ## Durable history
 
-When **Durable history** is enabled, TokenTelemetry writes parsed session data to `~/.tokentelemetry/history.db` as sessions are processed. This enables:
+When **Durable history** is enabled, AI Monitor Pro writes parsed session data to `~/.ai-monitor-pro/history.db` as sessions are processed. This enables:
 
 - Date ranges beyond what's in the agent's live log directory (agents may roll or truncate their own logs)
 - The 365-day heatmap in Projects → Insights
@@ -35,7 +35,7 @@ Set a longer period if you want year-long trends; set a shorter period to keep `
 
 ## Transcript archival
 
-By default, TokenTelemetry reads session transcripts live from the agent's log directory. If you enable **Transcript archival**, TokenTelemetry copies the full transcript text into `history.db` when a session is first processed.
+By default, AI Monitor Pro reads session transcripts live from the agent's log directory. If you enable **Transcript archival**, AI Monitor Pro copies the full transcript text into `history.db` when a session is first processed.
 
 Archival lets you:
 - Read session traces even after the agent has deleted or rotated its own log file
@@ -68,7 +68,7 @@ This is the recommended way to free disk space while preserving analytics data.
 
 | File | Contents |
 | --- | --- |
-| `~/.tokentelemetry/history.db` | Processed session rollups and (if archival is on) transcript text |
-| `~/.tokentelemetry/summaries.db` | Generated summaries (separate from transcripts) |
+| `~/.ai-monitor-pro/history.db` | Processed session rollups and (if archival is on) transcript text |
+| `~/.ai-monitor-pro/summaries.db` | Generated summaries (separate from transcripts) |
 
-Both are SQLite databases. You can inspect them with `sqlite3` or any SQLite viewer. The original agent log files (`~/.claude/`, `~/.codex/`, etc.) are never modified by TokenTelemetry.
+Both are SQLite databases. You can inspect them with `sqlite3` or any SQLite viewer. The original agent log files (`~/.claude/`, `~/.codex/`, etc.) are never modified by AI Monitor Pro.

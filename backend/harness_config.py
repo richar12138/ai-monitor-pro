@@ -1,6 +1,6 @@
-"""TokenTelemetry config: aliases + hidden projects + budgets.
+"""AI Monitor Pro config: aliases + hidden projects + budgets.
 
-Lives at the resolved data dir (default ~/.tokentelemetry/; see tt_paths). Files:
+Lives at the resolved data dir (default ~/.ai-monitor-pro/; see tt_paths). Files:
   - aliases.json   {"/old/path": "/new/path", ...}   one-way, no chains
   - hidden.json    ["/path", ...]                    projects excluded from dashboard
   - budgets.json   {"budgets": [ {...}, ... ]}        observational spend/token budgets
@@ -176,7 +176,7 @@ def save_aliases(aliases: Dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 # Budgets
 #
-# A budget is OBSERVATIONAL — TokenTelemetry reads logs after the fact and
+# A budget is OBSERVATIONAL — AI Monitor Pro reads logs after the fact and
 # cannot block a running agent, so a budget never caps spend; it only powers
 # threshold alerts and (later) burn-rate forecasts.
 #

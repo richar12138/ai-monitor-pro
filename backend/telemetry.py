@@ -1,4 +1,4 @@
-"""TokenTelemetry product telemetry — anonymous, opt-out, content-free.
+"""AI Monitor Pro product telemetry — anonymous, opt-out, content-free.
 
 Sends a tiny set of feature-usage events so we can learn which parts of the app
 people actually use (see docs/design/product-telemetry.md). It is deliberately
@@ -47,9 +47,9 @@ from harness_config import load_preferences
 # no credential in the request path.
 #
 # Currently the live Cloudflare Worker on its workers.dev URL. Once the custom
-# domain is attached, switch this to "https://telemetry.tokentelemetry.com/e".
+# domain is attached, switch this to "https://telemetry.github.com/richar12138/ai-monitor-pro/e".
 # --------------------------------------------------------------------------
-DEFAULT_PROXY_URL = "https://tt-telemetry-proxy.tokentelemetry.workers.dev"
+DEFAULT_PROXY_URL = "https://tt-telemetry-proxy.ai-monitor-pro.workers.dev"
 
 
 def _proxy_url() -> str:
@@ -69,7 +69,7 @@ def _proxy_url() -> str:
 
 
 _SEND_TIMEOUT_S = 3.0
-_SDK = "tokentelemetry"
+_SDK = "ai-monitor-pro"
 
 # Random per-process session id. Not persisted, not linked across launches —
 # the most privacy-preserving choice (cf. design §6, "minimal or omit").
@@ -312,7 +312,7 @@ def _post(payload: Dict[str, Any]) -> None:
         req = urllib.request.Request(
             _proxy_url(), data=data,
             headers={"Content-Type": "application/json",
-                     "User-Agent": "tokentelemetry-telemetry"},
+                     "User-Agent": "ai-monitor-pro-telemetry"},
             method="POST",
         )
         resp = urllib.request.urlopen(req, timeout=_SEND_TIMEOUT_S)

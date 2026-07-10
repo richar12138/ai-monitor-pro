@@ -55,7 +55,7 @@ export default function TokenGate() {
           Access token required
         </h2>
         <p className="mt-2 text-sm text-[var(--tt-fg-muted)]">
-          This TokenTelemetry instance is being accessed remotely. Paste the
+          This AI Monitor Pro instance is being accessed remotely. Paste the
           access token printed in the server&apos;s console when it started, then
           continue.
         </p>

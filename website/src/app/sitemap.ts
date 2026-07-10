@@ -5,7 +5,7 @@ export const dynamic = "force-static";
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: "https://tokentelemetry.com",
+      url: "https://github.com/richar12138/ai-monitor-pro",
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1,

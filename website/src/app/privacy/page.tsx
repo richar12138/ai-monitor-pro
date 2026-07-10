@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TokenTelemetry",
+  title: "Privacy Policy — AI Monitor Pro",
   description:
-    "How TokenTelemetry handles privacy: your logs, prompts, and costs stay on your machine; the app sends only anonymous, content-free usage stats (on by default, one-click off).",
-  alternates: { canonical: "https://tokentelemetry.com/privacy" },
+    "How AI Monitor Pro handles privacy: your logs, prompts, and costs stay on your machine; the app sends only anonymous, content-free usage stats (on by default, one-click off).",
+  alternates: { canonical: "https://github.com/richar12138/ai-monitor-pro/privacy" },
   robots: { index: true, follow: true },
 };
 
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
 
       <div className="mt-8 text-[15px] leading-relaxed text-[var(--tt-fg-muted)] space-y-3">
         <p>
-          TokenTelemetry respects your privacy. As the product evolves, we need to understand how people
+          AI Monitor Pro respects your privacy. As the product evolves, we need to understand how people
           actually use it — which features deliver value and which don&apos;t — so we can make it better
           for everyone. To do that we collect a small, anonymous set of usage signals. This data carries
           nothing about your work. And if you&apos;d rather not share it, or you&apos;re in a restricted
@@ -92,7 +92,7 @@ export default function PrivacyPage() {
 
       <Section title="This website">
         <p>
-          The marketing site (tokentelemetry.com) loads{" "}
+          The marketing site (github.com/richar12138/ai-monitor-pro) loads{" "}
           <strong className="text-[var(--tt-fg)]">Google Analytics 4</strong> and{" "}
           <strong className="text-[var(--tt-fg)]">Microsoft Clarity</strong> — but only after you press
           Accept on the cookie banner. If you decline, neither tool loads and no analytics cookies are
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
         <p>
           Questions or concerns? Open an issue on{" "}
           <a
-            href="https://github.com/VasiHemanth/tokentelemetry/issues"
+            href="https://github.com/richar12138/ai-monitor-pro/issues"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[var(--tt-fg)] underline underline-offset-2 hover:text-[var(--tt-brand)] transition-colors"

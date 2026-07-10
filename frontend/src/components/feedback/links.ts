@@ -1,4 +1,4 @@
-export const REPO = "VasiHemanth/tokentelemetry";
+export const REPO = "richar12138/ai-monitor-pro";
 
 const base = `https://github.com/${REPO}`;
 
@@ -18,8 +18,8 @@ export function issueUrl(opts: { title?: string; labels?: string; body?: string 
 }
 
 export const SOCIALS = {
-  github: `https://github.com/VasiHemanth`,
+  github: `https://github.com/richar12138`,
   linkedin: `https://www.linkedin.com/in/vasi-hemanth/`,
-  twitter: `https://twitter.com/VasiHemanth`,
+  twitter: `https://twitter.com/richar12138`,
   discussions: `${base}/discussions`,
 };

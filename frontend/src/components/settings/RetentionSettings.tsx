@@ -79,7 +79,7 @@ export function RetentionSettings() {
     <div className="space-y-3">
       <p className="text-[12px] text-[var(--tt-fg-dim)] max-w-[640px]">
         Coding agents prune their own session transcripts on a schedule, after which they vanish from
-        analytics. TokenTelemetry always keeps a tiny <span className="text-[var(--tt-fg)]">core summary</span> of
+        analytics. AI Monitor Pro always keeps a tiny <span className="text-[var(--tt-fg)]">core summary</span> of
         every session (tokens, cost, model — used for history & charts). For agents below you can also
         keep the <span className="text-[var(--tt-fg)]">full transcript</span> so it survives past the agent&apos;s
         own cleanup. Deleting archived transcripts frees space but <span className="text-[var(--tt-fg)]">keeps the
@@ -120,7 +120,7 @@ export function RetentionSettings() {
                   Free space
                 </button>
               )}
-              <div className="flex items-center gap-1.5" title={a.archivable ? "Keep full transcripts in TokenTelemetry" : "Archiving not available for this agent yet"}>
+              <div className="flex items-center gap-1.5" title={a.archivable ? "Keep full transcripts in AI Monitor Pro" : "Archiving not available for this agent yet"}>
                 <Archive size={12} className="text-[var(--tt-fg-dim)]" />
                 <Toggle
                   on={a.archive_enabled}

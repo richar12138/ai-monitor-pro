@@ -31,8 +31,8 @@ def test_is_local_session(kwargs, expected):
 
 def test_user_local_endpoint_matches(tmp_path, monkeypatch):
     monkeypatch.setenv("TOKENTELEMETRY_HOME", str(tmp_path))
-    (tmp_path / ".tokentelemetry").mkdir()
-    (tmp_path / ".tokentelemetry" / "power.json").write_text(
+    (tmp_path / ".ai-monitor-pro").mkdir()
+    (tmp_path / ".ai-monitor-pro" / "power.json").write_text(
         '{"localEndpoints": ["http://192.168.1.50:11434"]}')
     assert pc.is_local_session(endpoint="http://192.168.1.50:11434/api/chat") is True
     assert pc.is_local_session(endpoint="http://10.0.0.9:11434") is False
@@ -51,8 +51,8 @@ def test_tok_per_sec_scales_with_size():
 # --- confirmed-local wins over the pricing table (the #49 collision) -------
 def test_local_collision_not_priced_as_cloud(tmp_path, monkeypatch):
     monkeypatch.setenv("TOKENTELEMETRY_HOME", str(tmp_path))
-    (tmp_path / ".tokentelemetry").mkdir()
-    (tmp_path / ".tokentelemetry" / "power.json").write_text(
+    (tmp_path / ".ai-monitor-pro").mkdir()
+    (tmp_path / ".ai-monitor-pro" / "power.json").write_text(
         '{"loadWatts": 65, "costPerKwh": 0.20}')
     cloud = pricing.calculate_cost("llama-3.3-70b", 5000, 2000)
     local = pricing.calculate_cost("llama-3.3-70b", 5000, 2000, provider="ollama")
@@ -62,8 +62,8 @@ def test_local_collision_not_priced_as_cloud(tmp_path, monkeypatch):
 
 def test_measured_rate_beats_default(tmp_path, monkeypatch):
     monkeypatch.setenv("TOKENTELEMETRY_HOME", str(tmp_path))
-    (tmp_path / ".tokentelemetry").mkdir()
-    (tmp_path / ".tokentelemetry" / "power.json").write_text(
+    (tmp_path / ".ai-monitor-pro").mkdir()
+    (tmp_path / ".ai-monitor-pro" / "power.json").write_text(
         '{"loadWatts": 65, "costPerKwh": 0.20}')
     slow = pricing.calculate_cost("m:4b", 0, 1000, provider="ollama", tok_per_sec=10)
     fast = pricing.calculate_cost("m:4b", 0, 1000, provider="ollama", tok_per_sec=100)
@@ -145,8 +145,8 @@ def test_macos_battery_key_collisions(monkeypatch):
 def test_local_endpoint_scheme_insensitive(tmp_path, monkeypatch):
     """Grok C10: an https request should match an http-listed LAN endpoint."""
     monkeypatch.setenv("TOKENTELEMETRY_HOME", str(tmp_path))
-    (tmp_path / ".tokentelemetry").mkdir()
-    (tmp_path / ".tokentelemetry" / "power.json").write_text(
+    (tmp_path / ".ai-monitor-pro").mkdir()
+    (tmp_path / ".ai-monitor-pro" / "power.json").write_text(
         '{"localEndpoints": ["http://192.168.1.50:11434"]}')
     assert pc.is_local_session(endpoint="https://192.168.1.50:11434/api/chat") is True
     assert pc.is_local_session(endpoint="http://10.0.0.9:11434") is False

@@ -211,7 +211,7 @@ export default function ResourcesClient() {
         <p className="text-[13px] text-[var(--tt-fg-dim)]">
           Community submissions coming soon —{" "}
           <a
-            href="https://github.com/VasiHemanth/tokentelemetry"
+            href="https://github.com/richar12138/ai-monitor-pro"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[var(--tt-fg-muted)] underline underline-offset-2 hover:text-[var(--tt-brand)] transition-colors"

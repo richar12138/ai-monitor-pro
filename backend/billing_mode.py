@@ -1,6 +1,6 @@
 """Per-agent billing mode: how to *frame* the cost figure for each coding agent.
 
-TokenTelemetry always estimates cost at **API list prices**. That number is the
+AI Monitor Pro always estimates cost at **API list prices**. That number is the
 right universal unit for comparing sessions, but what it *means* to a user
 depends on how they pay for that agent:
 
@@ -17,7 +17,7 @@ Crucially this only changes the **label/disclaimer**, never the math (except
 ``local``, which ``pricing.calculate_cost`` already re-prices via power_config).
 
 Resolution order for an agent's mode:
-  1. an explicit user override in ``~/.tokentelemetry/billing.json`` (always wins)
+  1. an explicit user override in ``~/.ai-monitor-pro/billing.json`` (always wins)
   2. best-effort auto-detection from the agent's own auth/config on disk
   3. a sensible static default
 
@@ -143,7 +143,7 @@ def detect_mode(agent: str, home: Optional[Path] = None) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# User overrides (~/.tokentelemetry/billing.json: {"<agent>": "<mode>"})
+# User overrides (~/.ai-monitor-pro/billing.json: {"<agent>": "<mode>"})
 # ---------------------------------------------------------------------------
 def _overrides_path() -> Path:
     return data_dir() / "billing.json"

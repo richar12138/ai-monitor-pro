@@ -20,11 +20,11 @@ export default function HeroShot() {
         aria-hidden
         className="absolute -inset-x-6 -top-8 -bottom-8 pointer-events-none bg-gradient-to-tr from-[color:var(--tt-brand-glow)] via-transparent to-transparent blur-3xl"
       />
-      <BrowserFrame label="tokentelemetry · dashboard" className="relative">
+      <BrowserFrame label="ai-monitor-pro · dashboard" className="relative">
         <div className="aspect-[16/11] sm:aspect-[16/12] overflow-hidden bg-[var(--tt-sunken)]">
           <img
             src="/screenshots/dashboard.png"
-            alt="TokenTelemetry dashboard — live traces, token burn, and cost across every agent"
+            alt="AI Monitor Pro dashboard — live traces, token burn, and cost across every agent"
             width={3200}
             height={3000}
             className="block w-full h-auto object-cover object-top"

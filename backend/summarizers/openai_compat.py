@@ -45,7 +45,7 @@ _DEFAULT_TIMEOUT = int(os.environ.get("TT_OPENAI_COMPAT_TIMEOUT", "120"))
 # gateway demands a different signature.
 _DEFAULT_USER_AGENT = os.environ.get(
     "OPENAI_COMPAT_USER_AGENT",
-    "TokenTelemetry/1.0 (+https://github.com/VasiHemanth/tokentelemetry)",
+    "AI Monitor Pro/1.0 (+https://github.com/richar12138/ai-monitor-pro)",
 )
 
 # Reasoning models may prepend a <think>…</think> block; strip it so the

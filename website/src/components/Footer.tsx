@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Star } from "lucide-react";
 import { useGithubStats } from "@/lib/useGithubStats";
 
-const GITHUB_URL = "https://github.com/VasiHemanth/tokentelemetry";
+const GITHUB_URL = "https://github.com/richar12138/ai-monitor-pro";
 
 export default function Footer() {
   const { stars, forks } = useGithubStats();
@@ -11,10 +11,10 @@ export default function Footer() {
     <footer className="border-t border-[var(--tt-border)] py-[30px]">
       <div className="max-w-[1180px] mx-auto px-5 flex items-center justify-between gap-4 flex-wrap">
         <div className="font-mono text-[11.5px] text-[var(--tt-fg-dim)]">
-          tokentelemetry · built by{" "}
+          ai-monitor-pro · built by{" "}
           <a href="https://www.linkedin.com/in/vasi-hemanth/" target="_blank" rel="noopener noreferrer"
             className="text-[var(--tt-fg-muted)] hover:text-[var(--tt-fg)] transition-colors">
-            Hemanth Vasi
+            richar12138
           </a>
           <span className="mx-2 text-[var(--tt-fg-faint)]">·</span>
           <Link href="/privacy" className="text-[var(--tt-fg-muted)] hover:text-[var(--tt-fg)] transition-colors">Privacy</Link>

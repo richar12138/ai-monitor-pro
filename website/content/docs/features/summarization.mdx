@@ -5,7 +5,7 @@ description: One-click LLM summaries of any session — a structured brief or a 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Summarization lets you generate a human-readable summary of any session trace without reading through every event manually. You pick a backend (Claude, Codex, Gemini, Ollama, etc.), click Generate, and TokenTelemetry sends the session text to the model and displays the result.
+Summarization lets you generate a human-readable summary of any session trace without reading through every event manually. You pick a backend (Claude, Codex, Gemini, Ollama, etc.), click Generate, and AI Monitor Pro sends the session text to the model and displays the result.
 
 <Callout title="Video walkthrough">Coming soon.</Callout>
 
@@ -35,7 +35,7 @@ The narrative asks the model to write a free-form prose summary of the session. 
 
 ## Caching by content hash
 
-Summaries are cached by a hash of the session content. If you open the same session again, the cached summary is displayed instantly with no model call. The cache is stored in `~/.tokentelemetry/summaries.db`.
+Summaries are cached by a hash of the session content. If you open the same session again, the cached summary is displayed instantly with no model call. The cache is stored in `~/.ai-monitor-pro/summaries.db`.
 
 Because the cache key is the content hash (not the session ID), summaries survive session record moves and renames. A session that hasn't changed will always get its cached summary back immediately, even after a restart.
 
@@ -53,7 +53,7 @@ Summarization requires a backend. Configure one in Settings → Summarizer (or s
 
 ## Error cards
 
-If a summary fails, TokenTelemetry shows a structured error card — never a raw stack trace or provider JSON blob. Each card contains:
+If a summary fails, AI Monitor Pro shows a structured error card — never a raw stack trace or provider JSON blob. Each card contains:
 
 | Field | Description |
 | --- | --- |

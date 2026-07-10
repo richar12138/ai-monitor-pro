@@ -75,7 +75,7 @@
   }
 
   const INSTALL_CURL =
-    "curl -fsSL https://tokentelemetry.com/install.sh | bash";
+    "curl -fsSL https://ai-monitor-pro.com/install.sh | bash";
 
   const SUPPORTED_AGENTS = [
     "Claude Code", "Codex", "Gemini CLI", "Cursor",
@@ -110,7 +110,7 @@
             React.createElement(
               "div",
               { className: "text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400 mb-1" },
-              "TokenTelemetry not detected on ", base.replace(/^https?:\/\//, "")
+              "AI Monitor Pro not detected on ", base.replace(/^https?:\/\//, "")
             ),
             React.createElement(
               "h2",
@@ -129,7 +129,7 @@
         React.createElement(
           "p",
           { className: "text-sm text-zinc-300 leading-relaxed mb-3" },
-          React.createElement("strong", { className: "text-zinc-100" }, "TokenTelemetry"),
+          React.createElement("strong", { className: "text-zinc-100" }, "AI Monitor Pro"),
           " is a free, local observability dashboard for your AI agents — coding agents and autonomous ones. Sessions, costs, traces, tool calls, and reasoning, all in one place. No SDK, no signup, no cloud."
         ),
 
@@ -195,7 +195,7 @@
           React.createElement(
             "a",
             {
-              href: "https://tokentelemetry.com",
+              href: "https://ai-monitor-pro.com",
               target: "_blank",
               rel: "noopener noreferrer",
               className: "text-amber-400 hover:text-amber-300"
@@ -207,7 +207,7 @@
     );
   }
 
-  function TokenTelemetryLauncher() {
+  function AI Monitor ProLauncher() {
     const [base, setBase] = useState(loadBase());
     const [draft, setDraft] = useState(base);
     const [editing, setEditing] = useState(false);
@@ -258,13 +258,13 @@
             React.createElement(
               "div",
               { className: "flex items-center gap-2" },
-              React.createElement(CardTitle, { className: "text-lg" }, "TokenTelemetry"),
+              React.createElement(CardTitle, { className: "text-lg" }, "AI Monitor Pro"),
               React.createElement(HealthPill, { status })
             ),
             React.createElement(
               "p",
               { className: "text-xs text-zinc-400 max-w-prose leading-relaxed" },
-              "Local cost / token / trace observability for Hermes Agent and 9 coding agents. Click any tile below to open the relevant TokenTelemetry page in a new tab — no need to remember a second port."
+              "Local cost / token / trace observability for Hermes Agent and 9 coding agents. Click any tile below to open the relevant AI Monitor Pro page in a new tab — no need to remember a second port."
             )
           ),
           React.createElement(
@@ -289,7 +289,7 @@
                 React.createElement(
                   "div",
                   { className: "flex flex-col gap-1 grow" },
-                  React.createElement(Label, { className: "text-xs text-zinc-400" }, "TokenTelemetry base URL"),
+                  React.createElement(Label, { className: "text-xs text-zinc-400" }, "AI Monitor Pro base URL"),
                   React.createElement(Input, {
                     value: draft,
                     onChange: (e) => setDraft(e.target.value),
@@ -345,7 +345,7 @@
       React.createElement(
         "p",
         { className: "text-[11px] text-zinc-600 text-center pt-2" },
-        "TokenTelemetry runs locally and reads ",
+        "AI Monitor Pro runs locally and reads ",
         React.createElement("code", { className: "font-mono" }, "$HERMES_HOME"),
         " (or ",
         React.createElement("code", { className: "font-mono" }, "~/.hermes"),
@@ -355,8 +355,8 @@
   }
 
   if (window.__HERMES_PLUGINS__ && typeof window.__HERMES_PLUGINS__.register === "function") {
-    window.__HERMES_PLUGINS__.register("tokentelemetry", TokenTelemetryLauncher);
+    window.__HERMES_PLUGINS__.register("ai-monitor-pro", AI Monitor ProLauncher);
   } else {
-    console.error("[tokentelemetry] Hermes plugin loader not found on window");
+    console.error("[ai-monitor-pro] Hermes plugin loader not found on window");
   }
 })();

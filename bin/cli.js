@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TokenTelemetry — single cross-platform entry point.
+ * AI Monitor Pro — single cross-platform entry point.
  *
  * One command bootstraps both services on macOS, Linux, and Windows:
  *   - creates the Python venv if missing
@@ -94,13 +94,13 @@ function pickConnectHost(host, allowedOrigins) {
 
 function printHelp() {
   console.log([
-    'Usage: tokentelemetry [options]',
+    'Usage: ai-monitor-pro [options]',
     '',
     'Options:',
     '  -p, --port <N>            Frontend (Next.js) port. Default 3000.',
     '  -a, --api-port <N>        Backend (FastAPI) port. Default 8000.',
-    '  -d, --data-dir <P>        Where TokenTelemetry stores its config + state.',
-    '                            Default ~/.tokentelemetry (sets TOKENTELEMETRY_DATA_DIR).',
+    '  -d, --data-dir <P>        Where AI Monitor Pro stores its config + state.',
+    '                            Default ~/.ai-monitor-pro (sets TOKENTELEMETRY_DATA_DIR).',
     '      --host <ADDR>         Backend bind address. Default 127.0.0.1 (loopback).',
     '                            Use 0.0.0.0 (or an interface IP) to expose remotely.',
     '      --allowed-origins <L> Comma-separated hosts allowed to load the dashboard',
@@ -289,7 +289,7 @@ async function start() {
     ? { ...process.env, TOKENTELEMETRY_DATA_DIR: dataDir }
     : process.env;
 
-  console.log('\nTokenTelemetry');
+  console.log('\nAI Monitor Pro');
   console.log('--------------');
   checkNode();
   ensureBackend();

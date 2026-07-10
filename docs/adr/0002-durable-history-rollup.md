@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-13
-- **Deciders:** VasiHemanth
+- **Deciders:** richar12138
 - **Related:** issue #83, discussion #27, [design doc](../design/durable-history.md)
 
 ## Context
 
-TokenTelemetry was a pure live-scanner: every `/analytics` and `/sessions` request
+AI Monitor Pro was a pure live-scanner: every `/analytics` and `/sessions` request
 re-read the coding agents' on-disk transcripts and kept the result only in a 30-second
 in-RAM cache (`SESSIONS_TTL_SEC`, `get_sessions_cached` in `backend/main.py`). Nothing
 was persisted.
@@ -22,8 +22,8 @@ must work entirely on the user's machine, no external storage.
 
 ## Decision
 
-We will give TokenTelemetry its own **durable local SQLite store** at
-`~/.tokentelemetry/history.db` (honouring `TOKENTELEMETRY_DATA_DIR`), upserted on every
+We will give AI Monitor Pro its own **durable local SQLite store** at
+`~/.ai-monitor-pro/history.db` (honouring `TOKENTELEMETRY_DATA_DIR`), upserted on every
 scan from a background thread. Analytics reads the store (full history, filtered in SQL)
 **merged with** the live scan (freshest in-flight sessions, live wins). We store **raw
 facts** (tokens, cost, model, tok/s, timestamps + a small ecosystem JSON) and recompute

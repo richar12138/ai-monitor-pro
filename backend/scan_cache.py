@@ -4,7 +4,7 @@ Mirrors the pattern used by `_estimate_antigravity_tokens` in `main.py` (a
 `tokens_cache.json` sidecar next to the transcript, keyed by comparing mtimes),
 but instead of writing into the agent's own data directory — which Claude/Codex
 don't expose a natural scratch subdir for — sidecars live under
-TokenTelemetry's own `data_dir()` (see `tt_paths.py`), namespaced by agent and
+AI Monitor Pro's own `data_dir()` (see `tt_paths.py`), namespaced by agent and
 session id.
 
 Freshness is tracked via an explicit `_mtime` float stored INSIDE the JSON
@@ -27,7 +27,7 @@ from typing import Any, Dict, Optional
 
 from tt_paths import data_dir
 
-logger = logging.getLogger("tokentelemetry.scan_cache")
+logger = logging.getLogger("ai-monitor-pro.scan_cache")
 
 # Bump whenever the shape or meaning of cached payloads changes: new/renamed
 # payload fields, a parsing fix that alters computed values, or a pricing

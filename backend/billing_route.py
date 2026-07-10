@@ -44,7 +44,7 @@ Key concepts
 
 Bucket resolution itself is pure (no I/O). The only I/O here is the explicit
 per-agent *plan* persistence (``load_plans`` / ``save_plan`` →
-``~/.tokentelemetry/billing_plans.json``), which mirrors billing_mode's
+``~/.ai-monitor-pro/billing_plans.json``), which mirrors billing_mode's
 override file and never raises on missing/malformed data.
 """
 
@@ -418,7 +418,7 @@ def classify_task_type(
 
 
 # ---------------------------------------------------------------------------
-# Per-agent plan persistence (~/.tokentelemetry/billing_plans.json:
+# Per-agent plan persistence (~/.ai-monitor-pro/billing_plans.json:
 # {"<agent>": "<plan>"}). Separate file from billing.json so the flat
 # {agent: mode} schema there stays untouched/back-compatible.
 # ---------------------------------------------------------------------------

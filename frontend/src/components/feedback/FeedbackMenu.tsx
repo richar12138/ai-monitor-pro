@@ -13,7 +13,7 @@ type Props = {
 
 export default function FeedbackMenu({ align = "left", onSelect }: Props) {
   const pathname = usePathname();
-  const ctx = `\n\n---\n_Sent from TokenTelemetry · ${pathname}_`;
+  const ctx = `\n\n---\n_Sent from AI Monitor Pro · ${pathname}_`;
 
   const items = [
     {

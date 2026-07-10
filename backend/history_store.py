@@ -1,6 +1,6 @@
-"""Durable, local history store for TokenTelemetry.
+"""Durable, local history store for AI Monitor Pro.
 
-TokenTelemetry is otherwise a pure live-scanner: every request re-reads the
+AI Monitor Pro is otherwise a pure live-scanner: every request re-reads the
 coding agents' on-disk transcripts and keeps the result only in a 30s in-RAM
 cache. But agents prune their own transcripts (Claude Code deletes
 ``~/.claude/projects`` after ``cleanupPeriodDays``, default 30), so any analytics
@@ -34,7 +34,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from tt_paths import data_dir
 
-_log = logging.getLogger("tokentelemetry.history")
+_log = logging.getLogger("ai-monitor-pro.history")
 
 SCHEMA_VERSION = 1
 

@@ -9,21 +9,21 @@ import PageViewTracker from "@/components/PageViewTracker";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const SITE_URL = "https://tokentelemetry.com";
-const TITLE = "Token Telemetry — Observability for coding & autonomous agents (Hermes, Claude Code, Codex …)";
+const SITE_URL = "https://github.com/richar12138/ai-monitor-pro";
+const TITLE = "AI Monitor Pro — Observability for coding & autonomous agents (Hermes, Claude Code, Codex …)";
 const DESCRIPTION =
-  "Token Telemetry is local, read-only observability for 10 coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, Qwen, OpenCode, Vibe, Antigravity, Grok Build) plus Hermes Agent (Nous Research) — with a dedicated dashboard for gateway health, cron jobs, skills, memory, and 38 source platforms. One command, 100% on your machine.";
+  "AI Monitor Pro is local, read-only observability for 10 coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, Qwen, OpenCode, Vibe, Antigravity, Grok Build) plus Hermes Agent (Nous Research) — with a dedicated dashboard for gateway health, cron jobs, skills, memory, and 38 source platforms. One command, 100% on your machine.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: TITLE,
   description: DESCRIPTION,
-  applicationName: "TokenTelemetry",
+  applicationName: "AI Monitor Pro",
   keywords: [
-    "Token Telemetry",
-    "TokenTelemetry",
-    "tokentelemetry",
-    "tokentelemetry.com",
+    "AI Monitor Pro",
+    "AI Monitor Pro",
+    "ai-monitor-pro",
+    "github.com/richar12138/ai-monitor-pro",
     "token telementry",
     "tokentelementry",
     "token telemtry",
@@ -37,8 +37,8 @@ export const metadata: Metadata = {
     "Cursor logs",
     "open source agent telemetry",
   ],
-  authors: [{ name: "Hemanth Vasi", url: "https://www.linkedin.com/in/vasi-hemanth/" }],
-  creator: "Hemanth Vasi",
+  authors: [{ name: "richar12138", url: "https://www.linkedin.com/in/vasi-hemanth/" }],
+  creator: "richar12138",
   alternates: { canonical: SITE_URL },
   icons: {
     icon: [
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     url: SITE_URL,
-    siteName: "TokenTelemetry",
+    siteName: "AI Monitor Pro",
     type: "website",
     locale: "en_US",
     // Image is served by app/opengraph-image.tsx (dynamic, includes the
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    creator: "@VasiHemanth",
+    creator: "@richar12138",
     // Twitter image is served by app/twitter-image.tsx if present, else
     // falls back to the same opengraph-image.tsx.
   },
@@ -85,11 +85,11 @@ export const metadata: Metadata = {
 const JSON_LD = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "Token Telemetry",
-  alternateName: ["TokenTelemetry", "tokentelemetry", "Token-Telemetry"],
+  name: "AI Monitor Pro",
+  alternateName: ["AI Monitor Pro", "ai-monitor-pro", "Token-Telemetry"],
   url: SITE_URL,
   sameAs: [
-    "https://github.com/VasiHemanth/tokentelemetry",
+    "https://github.com/richar12138/ai-monitor-pro",
     "https://www.linkedin.com/in/vasi-hemanth/",
   ],
   description: DESCRIPTION,
@@ -97,19 +97,19 @@ const JSON_LD = {
   operatingSystem: "macOS, Linux, Windows",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   license: "https://opensource.org/licenses/MIT",
-  author: { "@type": "Person", name: "Hemanth Vasi", url: "https://www.linkedin.com/in/vasi-hemanth/" },
-  codeRepository: "https://github.com/VasiHemanth/tokentelemetry",
+  author: { "@type": "Person", name: "richar12138", url: "https://www.linkedin.com/in/vasi-hemanth/" },
+  codeRepository: "https://github.com/richar12138/ai-monitor-pro",
 };
 
 const ORG_LD = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "Token Telemetry",
-  alternateName: ["TokenTelemetry", "tokentelemetry"],
+  name: "AI Monitor Pro",
+  alternateName: ["AI Monitor Pro", "ai-monitor-pro"],
   url: SITE_URL,
   logo: `${SITE_URL}/og.png`,
   sameAs: [
-    "https://github.com/VasiHemanth/tokentelemetry",
+    "https://github.com/richar12138/ai-monitor-pro",
     "https://www.linkedin.com/in/vasi-hemanth/",
   ],
 };

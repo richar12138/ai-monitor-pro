@@ -63,7 +63,7 @@ export default function FeatureShowcase() {
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/50" />
                 <span className="ml-3 inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--tt-fg-dim)] truncate">
                   <Activity size={11} className="text-[var(--tt-brand)]" />
-                  tokentelemetry · {feature.label.toLowerCase()}
+                  ai-monitor-pro · {feature.label.toLowerCase()}
                 </span>
               </div>
               <img

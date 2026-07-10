@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to TokenTelemetry will be documented in this file.
+All notable changes to AI Monitor Pro will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [1.0.0] - 2026-04-27
 
 ### Added
-- Initial public release of TokenTelemetry
+- Initial public release of AI Monitor Pro
 - Local observability dashboard for AI coding agents
 - Support for 9 agents: Claude Code, Gemini CLI, Codex, Cursor, GitHub Copilot, Qwen, OpenCode, Vibe, Antigravity
 - Real-time token usage tracking and cost estimates
@@ -21,4 +21,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - One-command install via `install.sh` (macOS/Linux) and `start.bat` (Windows)
 - 100% local — no signup, no cloud, no telemetry
 - MIT open source license
-- Website at https://tokentelemetry.com
+- Website at https://github.com/richar12138/ai-monitor-pro

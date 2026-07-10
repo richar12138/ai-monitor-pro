@@ -1,12 +1,12 @@
-# TokenTelemetry — Hermes Dashboard Plugin
+# AI Monitor Pro — Hermes Dashboard Plugin
 
-> A launcher tab inside [Hermes Agent](https://github.com/NousResearch/hermes-agent)'s web dashboard for **[TokenTelemetry](https://tokentelemetry.com)** — local observability for **Hermes Agent AND 9 coding agents** (Claude Code, OpenAI Codex, Gemini CLI, Cursor, GitHub Copilot, Qwen, OpenCode, Vibe, Antigravity).
+> A launcher tab inside [Hermes Agent](https://github.com/NousResearch/hermes-agent)'s web dashboard for **[AI Monitor Pro](https://github.com/richar12138/ai-monitor-pro)** — local observability for **Hermes Agent AND 9 coding agents** (Claude Code, OpenAI Codex, Gemini CLI, Cursor, GitHub Copilot, Qwen, OpenCode, Vibe, Antigravity).
 
-> ℹ️ This repo is **auto-generated** from the canonical source in [`VasiHemanth/tokentelemetry`](https://github.com/VasiHemanth/tokentelemetry). File issues and PRs upstream.
+> ℹ️ This repo is **auto-generated** from the canonical source in [`richar12138/ai-monitor-pro`](https://github.com/richar12138/ai-monitor-pro). File issues and PRs upstream.
 
 ## What this plugin does
 
-Registers a `TokenTelemetry` tab in your Hermes Dashboard sidebar. Deep-link cards open TT pages in a new browser tab — one port to remember (`:9119`), no context-switching to `:3000`.
+Registers a `AI Monitor Pro` tab in your Hermes Dashboard sidebar. Deep-link cards open TT pages in a new browser tab — one port to remember (`:9119`), no context-switching to `:3000`.
 
 Pages reachable from the launcher:
 
@@ -19,32 +19,32 @@ Pages reachable from the launcher:
 
 ## Install
 
-### Prereq: install TokenTelemetry itself
+### Prereq: install AI Monitor Pro itself
 
-The plugin is a **launcher, not the engine**. You need TokenTelemetry running:
+The plugin is a **launcher, not the engine**. You need AI Monitor Pro running:
 
 ```bash
 # macOS / Linux
-curl -fsSL https://tokentelemetry.com/install.sh | bash
+curl -fsSL https://github.com/richar12138/ai-monitor-pro/install.sh | bash
 
 # Windows
-irm https://tokentelemetry.com/install.ps1 | iex
+irm https://github.com/richar12138/ai-monitor-pro/install.ps1 | iex
 ```
 
-Or clone the repo: <https://github.com/VasiHemanth/tokentelemetry>
+Or clone the repo: <https://github.com/richar12138/ai-monitor-pro>
 
 ### Install the plugin
 
 ```bash
-hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin
+hermes plugins install richar12138/ai-monitor-pro-hermes-plugin
 hermes dashboard
 ```
 
-Then open `http://127.0.0.1:9119` and click **TokenTelemetry** in the sidebar.
+Then open `http://127.0.0.1:9119` and click **AI Monitor Pro** in the sidebar.
 
-## What TokenTelemetry covers (so this plugin earns its keep)
+## What AI Monitor Pro covers (so this plugin earns its keep)
 
-TokenTelemetry isn't a Hermes-only tool. It tracks every AI agent you use:
+AI Monitor Pro isn't a Hermes-only tool. It tracks every AI agent you use:
 
 | Agent | What TT shows |
 |---|---|
@@ -63,7 +63,7 @@ Plus a unified `/analytics` view across all of them.
 
 ## Privacy
 
-The plugin is pure-frontend. It reads no Hermes data directly, makes no network requests beyond your local TokenTelemetry instance, and ships no telemetry. Your data never leaves your machine.
+The plugin is pure-frontend. It reads no Hermes data directly, makes no network requests beyond your local AI Monitor Pro instance, and ships no telemetry. Your data never leaves your machine.
 
 ## License
 
@@ -71,17 +71,17 @@ MIT — see [LICENSE](LICENSE).
 
 ## Links
 
-- **TokenTelemetry homepage**: <https://tokentelemetry.com>
-- **TokenTelemetry source**: <https://github.com/VasiHemanth/tokentelemetry>
+- **AI Monitor Pro homepage**: <https://github.com/richar12138/ai-monitor-pro>
+- **AI Monitor Pro source**: <https://github.com/richar12138/ai-monitor-pro>
 - **Hermes Agent**: <https://github.com/NousResearch/hermes-agent>
 
 ## Feedback
 
 All conversations happen on the canonical repo:
 
-- 💬 **Discussions** (ideas, Q&A, show-and-tell): <https://github.com/VasiHemanth/tokentelemetry/discussions>
-- 🐛 **Issues** (bugs, concrete feature requests): <https://github.com/VasiHemanth/tokentelemetry/issues>
+- 💬 **Discussions** (ideas, Q&A, show-and-tell): <https://github.com/richar12138/ai-monitor-pro/discussions>
+- 🐛 **Issues** (bugs, concrete feature requests): <https://github.com/richar12138/ai-monitor-pro/issues>
 
 ## Author
 
-**Hemanth Vasi** · 🐦 [@VasiHemanth](https://twitter.com/VasiHemanth) · 💼 [LinkedIn](https://www.linkedin.com/in/vasi-hemanth/)
+**richar12138** · 🐦 [@richar12138](https://twitter.com/richar12138) · 💼 [LinkedIn](https://www.linkedin.com/in/vasi-hemanth/)

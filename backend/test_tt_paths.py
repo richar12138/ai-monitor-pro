@@ -1,9 +1,9 @@
 """Tests for the configurable data directory (discussion #27).
 
-By default TokenTelemetry stores config + state in ``~/.tokentelemetry``. Users
+By default AI Monitor Pro stores config + state in ``~/.ai-monitor-pro``. Users
 who want it elsewhere (e.g. off a small system drive) can set
 ``TOKENTELEMETRY_DATA_DIR`` to point anywhere, or use the older
-``TOKENTELEMETRY_HOME`` convention (which still appends ``.tokentelemetry``).
+``TOKENTELEMETRY_HOME`` convention (which still appends ``.ai-monitor-pro``).
 These tests pin the resolution precedence and prove every config module honours
 it — so a single env var actually relocates *all* state, not just some of it.
 
@@ -34,11 +34,11 @@ def _restore(saved: dict) -> None:
             os.environ[v] = saved[v]
 
 
-def test_default_is_home_dot_tokentelemetry():
+def test_default_is_home_dot_ai-monitor-pro():
     saved = {v: os.environ.get(v) for v in _VARS}
     try:
         _clear_env()
-        assert tt_paths.data_dir() == Path.home() / ".tokentelemetry"
+        assert tt_paths.data_dir() == Path.home() / ".ai-monitor-pro"
     finally:
         _restore(saved)
 
@@ -48,7 +48,7 @@ def test_home_override_appends_dirname():
     try:
         _clear_env()
         os.environ["TOKENTELEMETRY_HOME"] = "/tmp/myhome"
-        assert tt_paths.data_dir() == Path("/tmp/myhome/.tokentelemetry")
+        assert tt_paths.data_dir() == Path("/tmp/myhome/.ai-monitor-pro")
     finally:
         _restore(saved)
 
@@ -58,7 +58,7 @@ def test_data_dir_override_is_verbatim():
     try:
         _clear_env()
         os.environ["TOKENTELEMETRY_DATA_DIR"] = "/mnt/d/tt-data"
-        # Used as-is — no ".tokentelemetry" suffix appended.
+        # Used as-is — no ".ai-monitor-pro" suffix appended.
         assert tt_paths.data_dir() == Path("/mnt/d/tt-data")
     finally:
         _restore(saved)
@@ -87,13 +87,13 @@ def test_tilde_is_expanded():
 
 def test_blank_values_fall_through():
     # An empty/whitespace env var must not produce a bogus path like "/" or
-    # "./.tokentelemetry"; it should be treated as unset.
+    # "./.ai-monitor-pro"; it should be treated as unset.
     saved = {v: os.environ.get(v) for v in _VARS}
     try:
         _clear_env()
         os.environ["TOKENTELEMETRY_DATA_DIR"] = "   "
         os.environ["TOKENTELEMETRY_HOME"] = ""
-        assert tt_paths.data_dir() == Path.home() / ".tokentelemetry"
+        assert tt_paths.data_dir() == Path.home() / ".ai-monitor-pro"
     finally:
         _restore(saved)
 

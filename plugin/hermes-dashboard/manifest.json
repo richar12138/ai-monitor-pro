@@ -1,11 +1,11 @@
 {
-  "name": "tokentelemetry",
-  "label": "TokenTelemetry",
-  "description": "Local cost / token / trace observability for Hermes Agent. Embeds the TokenTelemetry dashboard (default http://localhost:3000) inside Hermes Dashboard so you don't context-switch between ports.",
+  "name": "ai-monitor-pro",
+  "label": "AI Monitor Pro",
+  "description": "Local cost / token / trace observability for Hermes Agent. Embeds the AI Monitor Pro dashboard (default http://localhost:3000) inside Hermes Dashboard so you don't context-switch between ports.",
   "icon": "Activity",
   "version": "0.1.0",
   "tab": {
-    "path": "/tokentelemetry",
+    "path": "/ai-monitor-pro",
     "position": "after:analytics"
   },
   "entry": "dist/index.js",

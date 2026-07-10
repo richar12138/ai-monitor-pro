@@ -1,11 +1,11 @@
 ---
 title: Remote Access
-description: Expose the TokenTelemetry dashboard to other devices — tailnet, LAN, or SSH tunnel — with token-based authentication.
+description: Expose the AI Monitor Pro dashboard to other devices — tailnet, LAN, or SSH tunnel — with token-based authentication.
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-TokenTelemetry is **local-first** and binds to `127.0.0.1` by default. Remote access is opt-in and token-gated. Loopback requests (your browser on the same machine) are always exempt from the token requirement — the default local experience is unchanged.
+AI Monitor Pro is **local-first** and binds to `127.0.0.1` by default. Remote access is opt-in and token-gated. Loopback requests (your browser on the same machine) are always exempt from the token requirement — the default local experience is unchanged.
 
 <Callout type="warn">
 **The token is the security boundary, not CORS.** CORS only restrains browsers; it doesn't stop direct HTTP clients (`curl`, scripts, other machines). Always use the token on any non-loopback bind. Only use `--insecure-no-auth` on a fully trusted private network.

@@ -43,7 +43,7 @@ const zh: I18nDict = {
   "activity.title": "最近活动",
   "activity.autoSync": "自动同步 15s",
   "activity.empty.title": "暂无 Agent 数据",
-  "activity.empty.desc": "TokenTelemetry 监控本地 Agent 运行时。运行 Claude Code、Cursor、Copilot 或其他支持的 Agent 即可填充数据。",
+  "activity.empty.desc": "AI Monitor Pro 监控本地 Agent 运行时。运行 Claude Code、Cursor、Copilot 或其他支持的 Agent 即可填充数据。",
   "activity.noMessage": "无消息内容",
   "activity.agent": "Agent",
   "activity.project": "项目",
@@ -215,7 +215,7 @@ const zh: I18nDict = {
   // Settings
   "settings.configuration": "配置",
   "settings.title": "设置",
-  "settings.desc": "配置 TokenTelemetry 的会话摘要方式。",
+  "settings.desc": "配置 AI Monitor Pro 的会话摘要方式。",
   "settings.aiSummaries": "AI 会话摘要",
   "settings.aiSummariesDesc": "选择一个编码代理来生成叙事摘要，或完全禁用 AI 摘要。",
   "settings.summarizerBackend": "摘要后端",

@@ -4,8 +4,8 @@ import { Star, Copy, Check } from "lucide-react";
 import { track } from "@/lib/track";
 import { useGithubStats } from "@/lib/useGithubStats";
 
-const GITHUB_URL = "https://github.com/VasiHemanth/tokentelemetry";
-const INSTALL = "curl -fsSL https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.sh | bash";
+const GITHUB_URL = "https://github.com/richar12138/ai-monitor-pro";
+const INSTALL = "curl -fsSL https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.sh | bash";
 
 export default function FinalCTA() {
   const [copied, setCopied] = useState(false);

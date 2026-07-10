@@ -5,7 +5,7 @@ description: Dedicated autonomous-agent observability for Nous Research's Hermes
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Hermes Agent (by Nous Research) isn't a coding agent — it's an autonomous agent framework that runs across CLI, messaging platforms (Telegram, Discord, Slack, Feishu, DingTalk, …), scheduled jobs, and webhooks. Because it operates differently from coding agents, it gets its own dedicated surface in TokenTelemetry at `/hermes`.
+Hermes Agent (by Nous Research) isn't a coding agent — it's an autonomous agent framework that runs across CLI, messaging platforms (Telegram, Discord, Slack, Feishu, DingTalk, …), scheduled jobs, and webhooks. Because it operates differently from coding agents, it gets its own dedicated surface in AI Monitor Pro at `/hermes`.
 
 ![Hermes Agent](/screenshots/hermes.png)
 
@@ -29,19 +29,19 @@ Full Hermes Agent documentation is coming soon. When published, this page will c
 7. **Schedules** — cron job registry, last-run status, next-run countdown, and run history
 
 **Hermes Dashboard plugin:**
-The Hermes Dashboard plugin adds a TokenTelemetry tab inside Hermes's own web UI (port 9119), so you can deep-link to any TT page — Analytics, Projects, Traces, and the full Hermes surface — without switching browser tabs.
+The Hermes Dashboard plugin adds a AI Monitor Pro tab inside Hermes's own web UI (port 9119), so you can deep-link to any TT page — Analytics, Projects, Traces, and the full Hermes surface — without switching browser tabs.
 
 Install it with:
 
 ```bash
-hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin
+hermes plugins install richar12138/ai-monitor-pro-hermes-plugin
 hermes dashboard
 ```
 </Callout>
 
-## Running TokenTelemetry alongside Hermes
+## Running AI Monitor Pro alongside Hermes
 
-TokenTelemetry reads Hermes's local files (`~/.hermes/` by default, or `$HERMES_HOME` if set). Run TokenTelemetry on the same host as Hermes — remote-DB mode is not supported yet.
+AI Monitor Pro reads Hermes's local files (`~/.hermes/` by default, or `$HERMES_HOME` if set). Run AI Monitor Pro on the same host as Hermes — remote-DB mode is not supported yet.
 
 For Hermes running on a VPS, see [Remote Access](/docs/configuration/remote-access) for the two supported patterns (direct `--host` with token, or SSH tunnel with dual-port forward).
 
@@ -49,10 +49,10 @@ For Hermes running on a VPS, see [Remote Access](/docs/configuration/remote-acce
 
 ```bash
 # Install the Hermes Dashboard plugin (optional but recommended)
-hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin
+hermes plugins install richar12138/ai-monitor-pro-hermes-plugin
 
-# Start TokenTelemetry on the same host as Hermes (from inside the cloned folder)
-cd tokentelemetry && ./start.sh
+# Start AI Monitor Pro on the same host as Hermes (from inside the cloned folder)
+cd ai-monitor-pro && ./start.sh
 
 # Open the Hermes surface
 open http://localhost:3000/hermes

@@ -10,8 +10,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TokenTelemetry",
-  description: "Local token + cost monitoring for Claude Code, Codex, Gemini CLI, and other coding agents.",
+  title: "AI Monitor Pro",
+  description: "AI Monitor Pro - 本地 AI Agent Token 用量、成本与技能监控仪表盘。支持 Claude Code、Codex、Cursor、Hermes 等多种 Agent，提供 Token 追踪、成本分析、实时遥测等功能，完全本地运行，数据不上传。 | Token telemetry & observability for AI coding agents",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -3,7 +3,7 @@ name: Bug Report
 about: Something not working? Let us know.
 title: '[BUG] '
 labels: bug
-assignees: VasiHemanth
+assignees: richar12138
 ---
 
 ## Describe the bug
@@ -23,7 +23,7 @@ What you expected to happen.
 - **Node.js version**: (run `node -v`)
 - **Python version**: (run `python3 --version`)
 - **Agent(s) in use**: (e.g. Claude Code, Gemini CLI)
-- **TokenTelemetry version**: (check package.json or latest commit)
+- **AI Monitor Pro version**: (check package.json or latest commit)
 
 ## Logs / Screenshots
 Paste any relevant terminal output or screenshots here.

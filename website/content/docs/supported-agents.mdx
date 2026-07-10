@@ -1,9 +1,9 @@
 ---
 title: Supported Agents
-description: The 10 coding agents and Hermes autonomous agent that TokenTelemetry tracks, how each is detected, and what data each captures.
+description: The 10 coding agents and Hermes autonomous agent that AI Monitor Pro tracks, how each is detected, and what data each captures.
 ---
 
-TokenTelemetry reads log files from the agents listed below. Detection is automatic — no configuration needed. Just run your agent as normal and TokenTelemetry picks up the sessions.
+AI Monitor Pro reads log files from the agents listed below. Detection is automatic — no configuration needed. Just run your agent as normal and AI Monitor Pro picks up the sessions.
 
 ## Coding agents
 
@@ -44,11 +44,11 @@ Reads session files from `~/.gemini/`. Captures token counts (input/output), cos
 
 ### Antigravity
 
-Antigravity is Google's browser automation agent. TokenTelemetry reads its sessions from `~/.gemini/antigravity/` and additionally captures browser screenshots and Antigravity recording strips (thumbnail sequences from `browser_recordings`). See [Artifacts](/docs/features/artifacts).
+Antigravity is Google's browser automation agent. AI Monitor Pro reads its sessions from `~/.gemini/antigravity/` and additionally captures browser screenshots and Antigravity recording strips (thumbnail sequences from `browser_recordings`). See [Artifacts](/docs/features/artifacts).
 
 ### Cursor
 
-Cursor stores its chat sessions in `~/.cursor/` and VS Code's `workspaceStorage/`. TokenTelemetry merges sessions from both locations. Plans extracted from Cursor's `/plan` output are available in the Projects → Plans tab.
+Cursor stores its chat sessions in `~/.cursor/` and VS Code's `workspaceStorage/`. AI Monitor Pro merges sessions from both locations. Plans extracted from Cursor's `/plan` output are available in the Projects → Plans tab.
 
 ### GitHub Copilot
 
@@ -60,7 +60,7 @@ Reads session data from `~/.local/share/opencode/`. Token counts and traces are 
 
 ### Hermes Agent
 
-Hermes writes its state to `~/.hermes/` (or the directory pointed to by `$HERMES_HOME`). TokenTelemetry reads:
+Hermes writes its state to `~/.hermes/` (or the directory pointed to by `$HERMES_HOME`). AI Monitor Pro reads:
 
 - `sessions.db` / session JSON for per-call token and cost data
 - `agent.log` for per-API-call latency and cache-hit percentages
@@ -69,4 +69,4 @@ Hermes writes its state to `~/.hermes/` (or the directory pointed to by `$HERMES
 
 ## Requesting a new agent
 
-Don't see your agent? [Open a GitHub issue](https://github.com/VasiHemanth/tokentelemetry/issues) with the agent name and its log file format and we'll add support.
+Don't see your agent? [Open a GitHub issue](https://github.com/richar12138/ai-monitor-pro/issues) with the agent name and its log file format and we'll add support.

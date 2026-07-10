@@ -2,7 +2,7 @@ name: Pricing sync (models.dev)
 
 # Refreshes backend/pricing_data.json from models.dev and opens a PR for review.
 # This is the ONLY place pricing data is fetched over the network — it runs in
-# CI, never on a user machine. TokenTelemetry stays local-first: users get fresh
+# CI, never on a user machine. AI Monitor Pro stays local-first: users get fresh
 # prices through the normal version update, with no new outbound call.
 
 on:

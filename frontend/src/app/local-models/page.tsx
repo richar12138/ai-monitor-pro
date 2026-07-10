@@ -21,7 +21,7 @@ export default function LocalModelsPage() {
       >
         <div className="rounded-[var(--tt-radius-lg)] border border-[var(--tt-border)] bg-[var(--tt-sunken)] p-6 space-y-4 text-sm text-[var(--tt-fg-dim)]">
           <p>
-            TokenTelemetry can automatically measure your machine&apos;s real power draw. Depending on your hardware and OS, this reads your GPU directly (e.g. nvidia-smi) or uses your system&apos;s battery discharge rate.
+            AI Monitor Pro can automatically measure your machine&apos;s real power draw. Depending on your hardware and OS, this reads your GPU directly (e.g. nvidia-smi) or uses your system&apos;s battery discharge rate.
           </p>
           <ol className="list-decimal list-inside space-y-2 ml-2 text-[var(--tt-fg)]">
             <li><strong>If on a Mac/laptop:</strong> Unplug it from the wall charger (if plugged in, the battery isn&apos;t draining, so power can&apos;t be measured without admin privileges).</li>
@@ -29,7 +29,7 @@ export default function LocalModelsPage() {
             <li><strong>Click &quot;Measure&quot;</strong> below while the model is actively generating text.</li>
           </ol>
           <p className="mt-4">
-            TokenTelemetry will sample your power draw for 5 seconds and lock in the wattage. This ensures your local model costs are based on actual electricity usage rather than cloud API rates!
+            AI Monitor Pro will sample your power draw for 5 seconds and lock in the wattage. This ensures your local model costs are based on actual electricity usage rather than cloud API rates!
           </p>
         </div>
       </Section>

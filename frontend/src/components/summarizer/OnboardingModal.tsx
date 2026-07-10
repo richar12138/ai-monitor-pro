@@ -117,7 +117,7 @@ export default function OnboardingModal() {
           </div>
 
           <p className="text-[13px] leading-relaxed text-[var(--tt-fg-muted)]">
-            TokenTelemetry can turn each session trace into a short narrative — intent &amp; outcome,
+            AI Monitor Pro can turn each session trace into a short narrative — intent &amp; outcome,
             key actions, efficiency, and notable moments — using a coding agent you already have
             installed. The deterministic brief always works without this.
           </p>

@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
           <BarChart3 size={13} className="mt-0.5 shrink-0 text-[var(--tt-fg-dim)]" />
           <span>
             Durable history since <span className="text-[var(--tt-fg)]">{data.coverage.earliest.slice(0, 10)}</span>.
-            TokenTelemetry only records sessions present on disk from its first run — usage before then can't be
+            AI Monitor Pro only records sessions present on disk from its first run — usage before then can't be
             recovered, and agents prune their own transcripts over time, so older entries may be summary-only
             (no transcript drill-in).
           </span>

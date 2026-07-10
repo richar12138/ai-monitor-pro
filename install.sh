@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# tokentelemetry — one-line installer.
-#   curl -fsSL https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.sh | bash
+# ai-monitor-pro — one-line installer.
+#   curl -fsSL https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.sh | bash
 set -euo pipefail
 
-REPO_URL="https://github.com/VasiHemanth/tokentelemetry.git"
-TARGET_DIR="${TOKENTELEMETRY_DIR:-tokentelemetry}"
+REPO_URL="https://github.com/richar12138/ai-monitor-pro.git"
+TARGET_DIR="${TOKENTELEMETRY_DIR:-ai-monitor-pro}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: $1 is required but not installed."; exit 1; }; }
 

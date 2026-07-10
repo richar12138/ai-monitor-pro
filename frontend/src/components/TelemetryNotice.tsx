@@ -101,7 +101,7 @@ export default function TelemetryNotice() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] leading-relaxed text-[var(--tt-fg-muted)]">
-              <strong className="text-[var(--tt-fg)]">TokenTelemetry respects your privacy</strong>{" "}
+              <strong className="text-[var(--tt-fg)]">AI Monitor Pro respects your privacy</strong>{" "}
               — we collect a few anonymous usage stats to understand which features people use most,
               so we can keep improving the product for everyone.{" "}
               <strong className="text-[var(--tt-fg)]">Never</strong> your IP, code, prompts, file

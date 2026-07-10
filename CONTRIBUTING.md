@@ -1,14 +1,14 @@
-# Contributing to TokenTelemetry
+# Contributing to AI Monitor Pro
 
-Thank you for your interest in contributing! TokenTelemetry is a 100% local, open-source observability dashboard for AI coding agents. All contributions are welcome.
+Thank you for your interest in contributing! AI Monitor Pro is a 100% local, open-source observability dashboard for AI coding agents. All contributions are welcome.
 
 ## Getting Started
 
 1. **Fork** the repo on GitHub
 2. **Clone** your fork locally
    ```bash
-   git clone https://github.com/YOUR_USERNAME/tokentelemetry.git
-   cd tokentelemetry
+   git clone https://github.com/YOUR_USERNAME/ai-monitor-pro.git
+   cd ai-monitor-pro
    ```
 3. **Create a branch** for your feature or fix
    ```bash
@@ -43,7 +43,7 @@ This starts:
 backend/    # FastAPI app - reads agent log files
 frontend/   # Next.js dashboard UI
 bin/        # CLI entry point (cli.js)
-website/    # tokentelemetry.com marketing site
+website/    # github.com/richar12138/ai-monitor-pro marketing site
 install.sh  # One-line installer (macOS/Linux)
 start.bat   # Windows starter
 ```
@@ -76,7 +76,7 @@ Want to add support for a new coding agent? The backend reads log files from kno
 
 **For most PRs (fixes, small features, chores, docs): you don't need to write any
 formal docs.** Just explain *what* you changed and *why* in the PR description.
-Maintainers handle the rest — adding it to the [Roadmap board](https://github.com/users/VasiHemanth/projects/1),
+Maintainers handle the rest — adding it to the [Roadmap board](https://github.com/users/richar12138/projects/1),
 writing any decision record, and the `UPDATE.json` release note.
 
 You also don't need to touch the board or `UPDATE.json` yourself.

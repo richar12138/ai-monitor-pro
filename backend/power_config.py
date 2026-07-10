@@ -13,7 +13,7 @@ models:
    per-call cost is 0 — the monthly fee is tracked separately, outside this
    tool's per-session accounting.
 
-Config lives at ``~/.tokentelemetry/power.json``::
+Config lives at ``~/.ai-monitor-pro/power.json``::
 
     {
       "loadWatts": 80,

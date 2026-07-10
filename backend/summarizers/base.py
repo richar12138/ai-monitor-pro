@@ -2,7 +2,7 @@
 
 A summarizer turns a condensed trace brief into a natural-language summary by
 shelling out to a coding CLI the user already has installed and authenticated.
-This keeps TokenTelemetry's "no signup, no key, 100% local-first" promise — we
+This keeps AI Monitor Pro's "no signup, no key, 100% local-first" promise — we
 borrow the agent the user is already running rather than shipping our own key.
 
 Each adapter only needs to know how to invoke its CLI headlessly and pull the
@@ -29,7 +29,7 @@ class SummarizerError(Exception):
 
 
 # CLIs that log their own sessions (codex/gemini/qwen) are run from here so the
-# ingest layer can recognise and skip TokenTelemetry's own summarizer calls,
+# ingest layer can recognise and skip AI Monitor Pro's own summarizer calls,
 # rather than surfacing them as phantom traces in the user's stats.
 SUMMARIZER_CWD = data_dir() / "summarizer"
 

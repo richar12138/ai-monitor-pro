@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const dynamic = "force-static";
-export const alt = "TokenTelemetry — Local observability for coding agents and Hermes Agent";
+export const alt = "AI Monitor Pro — Local observability for coding agents and Hermes Agent";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -46,7 +46,7 @@ export default function OpenGraphImage() {
               </svg>
             </div>
             <div style={{ display: "flex", fontSize: "44px", fontWeight: 900, letterSpacing: "-1px" }}>
-              TokenTelemetry
+              AI Monitor Pro
             </div>
           </div>
 
@@ -109,7 +109,7 @@ export default function OpenGraphImage() {
             fontFamily: "ui-monospace, monospace",
           }}
         >
-          <div style={{ display: "flex" }}>tokentelemetry.com</div>
+          <div style={{ display: "flex" }}>github.com/richar12138/ai-monitor-pro</div>
           <div style={{ display: "flex", gap: "20px" }}>
             <span style={{ display: "flex" }}>100% local</span>
             <span style={{ display: "flex" }}>·</span>

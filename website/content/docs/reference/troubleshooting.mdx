@@ -3,16 +3,16 @@ title: Troubleshooting
 description: Solutions for common problems — agent not detected, ports in use, summarizer failures, and remote access issues.
 ---
 
-## `command not found: tokentelemetry`
+## `command not found: ai-monitor-pro`
 
-**Symptom:** After installing, you run `tokentelemetry` and get `zsh: command not found: tokentelemetry` (or `bash: tokentelemetry: command not found`).
+**Symptom:** After installing, you run `ai-monitor-pro` and get `zsh: command not found: ai-monitor-pro` (or `bash: ai-monitor-pro: command not found`).
 
-**Cause:** There is no global `tokentelemetry` command. The installer clones the app into a `tokentelemetry/` folder and deliberately installs nothing on your PATH.
+**Cause:** There is no global `ai-monitor-pro` command. The installer clones the app into a `ai-monitor-pro/` folder and deliberately installs nothing on your PATH.
 
 **Fix:** Launch it from inside that folder:
 
 ```bash
-cd tokentelemetry
+cd ai-monitor-pro
 ./start.sh            # macOS / Linux  (or: node bin/cli.js)
 ```
 
@@ -24,7 +24,7 @@ The one-line installer also starts the app for you on first install — you only
 
 **Checks:**
 
-1. **Wait for a session to complete.** TokenTelemetry reads log files after a session ends (or after it creates a new log entry). Active sessions may not appear until the next 15-second dashboard refresh.
+1. **Wait for a session to complete.** AI Monitor Pro reads log files after a session ends (or after it creates a new log entry). Active sessions may not appear until the next 15-second dashboard refresh.
 
 2. **Confirm the log directory exists.** Each agent writes to a default location:
    - Claude Code: `~/.claude/projects/`
@@ -44,17 +44,17 @@ The one-line installer also starts the app for you on first install — you only
    ls ~/.claude/projects/
    ```
 
-3. **Run at least one session.** TokenTelemetry needs existing log files. Launch your agent, send a message, and wait for the session to complete before opening the dashboard.
+3. **Run at least one session.** AI Monitor Pro needs existing log files. Launch your agent, send a message, and wait for the session to complete before opening the dashboard.
 
 4. **Check for permission issues.** On macOS, Full Disk Access may be required to read some agent log directories. Check System Settings → Privacy & Security → Full Disk Access.
 
-5. **Restart TokenTelemetry.** If you installed the agent after starting TokenTelemetry, restart so the new log paths are picked up.
+5. **Restart AI Monitor Pro.** If you installed the agent after starting AI Monitor Pro, restart so the new log paths are picked up.
 
 ---
 
 ## Ports in use
 
-**Symptom:** TokenTelemetry fails to start with "required port(s) already in use: 3000" (or 8000).
+**Symptom:** AI Monitor Pro fails to start with "required port(s) already in use: 3000" (or 8000).
 
 **Fix:**
 
@@ -189,11 +189,11 @@ python3 --version   # should show 3.9+
 
 **Symptom:** The dashboard shows zero sessions immediately after installing.
 
-**This is expected.** TokenTelemetry needs agent log files to read. Start an AI agent session (Claude Code, Gemini CLI, etc.), let it run for at least one exchange, then refresh the dashboard. The first session will appear within 15 seconds.
+**This is expected.** AI Monitor Pro needs agent log files to read. Start an AI agent session (Claude Code, Gemini CLI, etc.), let it run for at least one exchange, then refresh the dashboard. The first session will appear within 15 seconds.
 
 ---
 
 ## Still stuck?
 
-- [GitHub Discussions](https://github.com/VasiHemanth/tokentelemetry/discussions) — ask questions and share what you're seeing
-- [GitHub Issues](https://github.com/VasiHemanth/tokentelemetry/issues) — report bugs with the dashboard or a specific agent
+- [GitHub Discussions](https://github.com/richar12138/ai-monitor-pro/discussions) — ask questions and share what you're seeing
+- [GitHub Issues](https://github.com/richar12138/ai-monitor-pro/issues) — report bugs with the dashboard or a specific agent

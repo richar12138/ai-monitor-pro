@@ -1,16 +1,16 @@
 ---
 title: Quick Start
-description: Launch TokenTelemetry for the first time, let it auto-detect your agents, and open the dashboard.
+description: Launch AI Monitor Pro for the first time, let it auto-detect your agents, and open the dashboard.
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-## 1. Start TokenTelemetry
+## 1. Start AI Monitor Pro
 
-The one-line installer launches TokenTelemetry for you on first install. To start it again afterwards, run the launcher **from inside the `tokentelemetry/` folder** it cloned (there is no global `tokentelemetry` command):
+The one-line installer launches AI Monitor Pro for you on first install. To start it again afterwards, run the launcher **from inside the `ai-monitor-pro/` folder** it cloned (there is no global `ai-monitor-pro` command):
 
 ```bash
-cd tokentelemetry
+cd ai-monitor-pro
 ./start.sh            # macOS / Linux
 # start.bat           # Windows
 # node bin/cli.js     # cross-platform
@@ -37,7 +37,7 @@ http://localhost:3000
 You'll see the dashboard with KPI cards at the top (sessions, tokens, projects, cost) and charts below. If you haven't run any agents yet the counts will be zero — that's expected.
 
 <Callout title="The dashboard is local-only by default">
-TokenTelemetry binds to `127.0.0.1`, so `http://localhost:3000` works only on the machine running it. Opening it from your phone or another computer is opt-in and token-gated — see [Remote Access](/docs/configuration/remote-access) for the `--host` and SSH-tunnel options.
+AI Monitor Pro binds to `127.0.0.1`, so `http://localhost:3000` works only on the machine running it. Opening it from your phone or another computer is opt-in and token-gated — see [Remote Access](/docs/configuration/remote-access) for the `--host` and SSH-tunnel options.
 </Callout>
 
 ## 3. Run an agent session
@@ -55,7 +55,7 @@ gemini
 codex
 ```
 
-TokenTelemetry will detect the new session automatically. The dashboard refreshes every 15 seconds, so you'll see live token counts appear within a few seconds of starting the agent.
+AI Monitor Pro will detect the new session automatically. The dashboard refreshes every 15 seconds, so you'll see live token counts appear within a few seconds of starting the agent.
 
 ## 4. Explore
 
@@ -65,18 +65,18 @@ TokenTelemetry will detect the new session automatically. The dashboard refreshe
 
 ## Auto-detection
 
-TokenTelemetry looks for agent logs in their default locations:
+AI Monitor Pro looks for agent logs in their default locations:
 
 - `~/.claude/projects/` for Claude Code
 - `~/.codex/sessions/` for Codex
 - `~/.gemini/` for Gemini CLI
 - And so on — see [Supported Agents](/docs/supported-agents) for the full list.
 
-No configuration is needed. If you keep agent logs in a non-default location, see [Custom Data Directory](/docs/configuration/data-directory) — though that flag controls where TokenTelemetry stores *its own* state, not where it looks for agent logs.
+No configuration is needed. If you keep agent logs in a non-default location, see [Custom Data Directory](/docs/configuration/data-directory) — though that flag controls where AI Monitor Pro stores *its own* state, not where it looks for agent logs.
 
 ## Suppressing the auto-open browser
 
-If you're running TokenTelemetry in a headless environment (a CI box, a VPS, inside an agent harness), set:
+If you're running AI Monitor Pro in a headless environment (a CI box, a VPS, inside an agent harness), set:
 
 ```bash
 AGENT_HARNESS_NO_OPEN=1 ./start.sh    # or: AGENT_HARNESS_NO_OPEN=1 node bin/cli.js
@@ -86,4 +86,4 @@ The launcher will start both services without trying to open a browser.
 
 ## Stop
 
-Press **Ctrl+C** in the terminal where TokenTelemetry is running. Both the backend and frontend stop cleanly.
+Press **Ctrl+C** in the terminal where AI Monitor Pro is running. Both the backend and frontend stop cleanly.

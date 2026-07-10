@@ -5,13 +5,13 @@ description: Configure wattage, electricity rate, and carbon intensity to see en
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-When you run AI models locally (via Ollama, llama.cpp, LM Studio, or any OpenAI-compatible server), TokenTelemetry can estimate the electricity cost and CO₂ emissions of each session alongside the usual token counts and API-equivalent cost.
+When you run AI models locally (via Ollama, llama.cpp, LM Studio, or any OpenAI-compatible server), AI Monitor Pro can estimate the electricity cost and CO₂ emissions of each session alongside the usual token counts and API-equivalent cost.
 
 Open **Settings → Local Models** (or navigate to `/local-models` in the app) to configure these settings.
 
 ## How it works
 
-TokenTelemetry multiplies:
+AI Monitor Pro multiplies:
 
 ```
 energy (Wh) = wattage (W) × session_duration (hours)
@@ -25,7 +25,7 @@ Session duration is measured as wall-clock time from session start to session en
 
 ### Apple Silicon defaults
 
-TokenTelemetry ships chip-aware defaults for Apple Silicon, which accounts for the unified memory architecture where the GPU and CPU draw from the same power budget. The default is chosen by the chip **tier** (detected via `sysctl`), not the generation number — every M-series base chip uses the same estimate, and so on up the tiers:
+AI Monitor Pro ships chip-aware defaults for Apple Silicon, which accounts for the unified memory architecture where the GPU and CPU draw from the same power budget. The default is chosen by the chip **tier** (detected via `sysctl`), not the generation number — every M-series base chip uses the same estimate, and so on up the tiers:
 
 | Apple Silicon tier | Default wattage |
 | --- | --- |
@@ -38,7 +38,7 @@ These are typical whole-package draws under sustained inference load. On non-App
 
 ### Measure button (calibration)
 
-For a more accurate reading, use the **Measure** button on the Local Models settings page. It runs a 4-second inference load test and reads the power draw from the system's power management interface (Apple Silicon only). The measured value replaces the default and is saved to `~/.tokentelemetry/power.json`.
+For a more accurate reading, use the **Measure** button on the Local Models settings page. It runs a 4-second inference load test and reads the power draw from the system's power management interface (Apple Silicon only). The measured value replaces the default and is saved to `~/.ai-monitor-pro/power.json`.
 
 Remeasure after you upgrade your hardware or change which model tier you use most (a large 70B model on an M4 Max draws significantly more than a 7B model on an M2).
 
@@ -71,7 +71,7 @@ Common values:
 
 ## Local vs subscription endpoint classification
 
-TokenTelemetry needs to know whether a session used a local model or a cloud API to decide whether to show power/CO₂ estimates. It classifies sessions by their **billing mode**:
+AI Monitor Pro needs to know whether a session used a local model or a cloud API to decide whether to show power/CO₂ estimates. It classifies sessions by their **billing mode**:
 
 - `local` — model ran locally; power and CO₂ estimates are shown.
 - `subscription` / `api` / `unknown` — cloud session; power estimates are not shown (the energy cost is on the provider's side, not yours).
@@ -89,7 +89,7 @@ Once configured, the Dashboard and per-session traces show:
 
 ## Where settings are stored
 
-Power and electricity settings are stored in `~/.tokentelemetry/power.json`. You can edit the file directly — it's plain JSON.
+Power and electricity settings are stored in `~/.ai-monitor-pro/power.json`. You can edit the file directly — it's plain JSON.
 
 <Callout type="info">
 Power estimates are only as accurate as the inputs. If your workload varies (e.g. you run a mix of small and large models), use the average wattage across your model sizes, or configure separate profiles and switch between them.

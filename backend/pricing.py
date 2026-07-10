@@ -311,7 +311,7 @@ def calculate_cost(
     # --- LOOKUP region -----------------------------------------------------
     # Subscription / local-model branches go FIRST so they short-circuit before
     # the per-token rate-math at the bottom. Both are opt-in via
-    # ~/.tokentelemetry/power.json; with no config the substring match never
+    # ~/.ai-monitor-pro/power.json; with no config the substring match never
     # fires and unpriced models fall through to _default as before.
     if endpoint:
         try:
@@ -359,7 +359,7 @@ def calculate_cost(
                     break
         if not config:
             # No known API rate for this model. If the user has opted in via
-            # ~/.tokentelemetry/power.json, treat it as a local model and price
+            # ~/.ai-monitor-pro/power.json, treat it as a local model and price
             # it by electricity instead of the (wrong) _default per-token rate.
             try:
                 from power_config import (

@@ -30,7 +30,7 @@ def _fresh_modules(home: str):
 
 
 def _write_power_json(home: str, data: dict) -> None:
-    d = Path(home) / ".tokentelemetry"
+    d = Path(home) / ".ai-monitor-pro"
     d.mkdir(parents=True, exist_ok=True)
     (d / "power.json").write_text(json.dumps(data), encoding="utf-8")
 
@@ -90,7 +90,7 @@ def test_device_default_falls_back_to_flat_when_no_estimate(monkeypatch):
 
 def test_malformed_file_falls_back_to_defaults():
     with tempfile.TemporaryDirectory() as home:
-        d = Path(home) / ".tokentelemetry"
+        d = Path(home) / ".ai-monitor-pro"
         d.mkdir(parents=True)
         (d / "power.json").write_text("{not valid json", encoding="utf-8")
         pc, _ = _fresh_modules(home)

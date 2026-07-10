@@ -12,7 +12,7 @@
 @source "../../node_modules/fumadocs-ui/dist/**/*.js";
 
 /* Re-skin the Fumadocs docs chrome (sidebar, nav, cards, search) to the
-   TokenTelemetry token system so /docs matches the rest of the site instead of
+   AI Monitor Pro token system so /docs matches the rest of the site instead of
    the stock neutral preset. We force dark (see app/docs/layout.tsx), so we only
    need to override the dark values. `:root, .dark` placed AFTER the preset
    imports wins on source order at equal specificity. */
@@ -48,7 +48,7 @@
 }
 
 /* =========================================================================
-   TokenTelemetry website — same token system as the app (dark only).
+   AI Monitor Pro website — same token system as the app (dark only).
    ========================================================================= */
 :root {
   --tt-canvas:    #0a0c10;

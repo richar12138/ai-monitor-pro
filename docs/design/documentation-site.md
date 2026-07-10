@@ -7,7 +7,7 @@ resources page, added to the existing marketing site. Decision recorded in
 ## Goal
 
 Today `website/` is a Next.js 16 marketing site (static export → GitHub Pages,
-custom domain `tokentelemetry.com`). It sells the product but doesn't *teach* it.
+custom domain `github.com/richar12138/ai-monitor-pro`). It sells the product but doesn't *teach* it.
 We want two new surfaces:
 
 1. **Docs** — one page per feature (like shadcn's component docs): what it is, a
@@ -26,11 +26,11 @@ The product runs locally (`frontend/` on `localhost`). The people who most need
 feature docs are **installed users**, who have no reason to revisit the marketing
 site. So docs serve two audiences from a single hosted source:
 
-- **Pre-install / discovery** — someone googling "how does TokenTelemetry track
+- **Pre-install / discovery** — someone googling "how does AI Monitor Pro track
   subagent cost" lands on `/docs/...`. Doubles as SEO and onboarding.
 - **Post-install / in-app** — the local app gets a global **Docs** link plus
   per-page contextual help icons that **deep-link out** to the matching hosted
-  page (e.g. the Hermes page's help icon opens `tokentelemetry.com/docs/hermes`
+  page (e.g. the Hermes page's help icon opens `github.com/richar12138/ai-monitor-pro/docs/hermes`
   in the browser).
 
 The local app **does not bundle a copy** of the docs — it links to the live ones.
@@ -56,7 +56,7 @@ website/  (existing Next.js 16 app, output: "export" → GitHub Pages)
 └── content/resources.json   ← curated community blocks (NEW)
 
 frontend/  (the local app)
-└── Docs link in nav + per-page "?" help icons → deep-link to tokentelemetry.com/docs/<feature>
+└── Docs link in nav + per-page "?" help icons → deep-link to github.com/richar12138/ai-monitor-pro/docs/<feature>
 ```
 
 - **Framework: Fumadocs** — Next.js App-Router-native, Tailwind v4, MDX, builds
@@ -74,7 +74,7 @@ The content the docs must cover, grounded in the actual feature surface
 (verified across `frontend/`, `backend/`, `bin/cli.js`). Each leaf is one MDX page.
 
 ### 1. Getting Started  *(user-prioritised)*
-- **Introduction** — what TokenTelemetry is, local-first promise, who it's for,
+- **Introduction** — what AI Monitor Pro is, local-first promise, who it's for,
   the "what you'll see" tour. Reuse `README.md` problem/solution table + `llms.txt`.
 - **Installation** — three paths (curl one-liner, Windows PowerShell, clone & run).
   Requirements: Node 18+, Python 3.9+, npm, agents already installed.
@@ -128,7 +128,7 @@ The content the docs must cover, grounded in the actual feature surface
 - **Update Check & Privacy** — update-check toggle + `TT_NO_UPDATE_CHECK`;
   anonymous telemetry toggle + `TT_NO_TELEMETRY`; what is and isn't sent.
 - **Custom Data Directory** — `--data-dir` / `TOKENTELEMETRY_DATA_DIR` /
-  `TOKENTELEMETRY_HOME` precedence; what lives in `~/.tokentelemetry/`.
+  `TOKENTELEMETRY_HOME` precedence; what lives in `~/.ai-monitor-pro/`.
 - **Ports & Networking** — `--port` / `--api-port`, `NEXT_PUBLIC_API_PORT`,
   port-in-use behaviour.
 - **Remote Access** — `--host`, auto-generated token, `--auth-token`,
@@ -138,7 +138,7 @@ The content the docs must cover, grounded in the actual feature surface
 ### 4. Reference
 - **CLI & Environment** — full flag table + every `TT_*` / `TOKENTELEMETRY_*` /
   `OPENAI_COMPAT_*` / `HERMES_HOME` env var.
-- **Data Directory Layout** — every file in `~/.tokentelemetry/` and its purpose.
+- **Data Directory Layout** — every file in `~/.ai-monitor-pro/` and its purpose.
 - **FAQ** — reuse the 9 site FAQ items + README FAQ.
 - **Troubleshooting** — per-agent "not detected", ports, summarizer failures,
   remote-access auth.
@@ -171,8 +171,8 @@ Settled with the maintainer (see [ADR-0003](../adr/0003-docs-site-fumadocs.md)):
 
 - **GitHub Pages, same `website/` app, same domain.** No new infra; the existing
   `deploy-website.yml` already rebuilds on `website/**`.
-- **Subdirectory, not subdomain** — `tokentelemetry.com/docs` + `/resources`, not
-  `docs.tokentelemetry.com`. A subdirectory inherits the main domain's accumulated
+- **Subdirectory, not subdomain** — `github.com/richar12138/ai-monitor-pro/docs` + `/resources`, not
+  `docs.github.com/richar12138/ai-monitor-pro`. A subdirectory inherits the main domain's accumulated
   authority and consolidates ranking signals (search engines treat a subdomain as
   a largely separate site); docs are the project's strongest long-tail SEO asset,
   so they should feed and draw from the main domain. Also: zero DNS work, one

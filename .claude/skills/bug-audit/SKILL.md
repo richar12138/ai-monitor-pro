@@ -5,7 +5,7 @@ description: Weekly multi-agent audit for serious bugs (data integrity, silent c
 
 # bug-audit — weekly serious-bug sweep
 
-Multi-agent audit of the TokenTelemetry backend/frontend for the bug class
+Multi-agent audit of the AI Monitor Pro backend/frontend for the bug class
 that motivated it (PR #131: a silent 100-session cap plus stub rows crushing
 real persisted data). Optimized for bugs that **corrupt data, lose data, or
 silently report wrong numbers** — not style or hypotheticals.
@@ -72,7 +72,7 @@ Run manually with `/bug-audit`, or schedule headless:
 
 ```bash
 # launchd/cron, weekly:
-cd /path/to/tokentelemetry && claude -p "/bug-audit" --permission-mode acceptEdits
+cd /path/to/ai-monitor-pro && claude -p "/bug-audit" --permission-mode acceptEdits
 ```
 
 Budget note: one run spawns roughly 6 Sonnet scanners + 2-4 Opus deep

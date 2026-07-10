@@ -7,7 +7,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 The Summarizer generates readable summaries of session traces. It's optional — you only need to configure it if you want one-click summaries on the [Summarization](/docs/features/summarization) tab. Token counting, cost tracking, and traces all work without a summarizer.
 
-Open Settings → Summarizer in the TokenTelemetry UI to configure your backend.
+Open Settings → Summarizer in the AI Monitor Pro UI to configure your backend.
 
 ## Choosing a backend
 
@@ -21,13 +21,13 @@ Open Settings → Summarizer in the TokenTelemetry UI to configure your backend.
 | **Antigravity** | Antigravity agent installed | Useful if you're already running Antigravity |
 | **OpenAI-compatible** | Any server speaking `/v1/chat/completions` | Maximum flexibility: llama.cpp, vLLM, LM Studio, Groq, OpenRouter, and more |
 
-All backends are invoked locally. For CLI-based backends (Claude, Codex, Gemini, Qwen, Antigravity), TokenTelemetry shells out to the CLI binary you already have installed. The OpenAI-compatible backend uses stdlib `urllib` — no new Python dependencies.
+All backends are invoked locally. For CLI-based backends (Claude, Codex, Gemini, Qwen, Antigravity), AI Monitor Pro shells out to the CLI binary you already have installed. The OpenAI-compatible backend uses stdlib `urllib` — no new Python dependencies.
 
 ## Model pickers
 
 For each backend, a model picker lets you choose which model to use for summarization. The picker shows the models available to the backend's CLI. You can also type a model name directly.
 
-The selected model is stored in `~/.tokentelemetry/summarizer.json` and applied to all future summarization requests.
+The selected model is stored in `~/.ai-monitor-pro/summarizer.json` and applied to all future summarization requests.
 
 ## OpenAI-compatible backend settings
 
@@ -47,7 +47,7 @@ The OpenAI-compatible backend has additional settings because it supports a wide
 | **Enable thinking** | Off | Send `chat_template_kwargs: {enable_thinking: true}` for Qwen3 thinking mode via vLLM |
 
 <Callout type="info">
-Non-OpenAI parameters (top_k, min_p, repetition_penalty, enable_thinking) are sent first. If the server rejects them with HTTP 400, TokenTelemetry automatically retries with a clean OpenAI-only payload so the summary still goes through. You don't need to toggle this manually.
+Non-OpenAI parameters (top_k, min_p, repetition_penalty, enable_thinking) are sent first. If the server rejects them with HTTP 400, AI Monitor Pro automatically retries with a clean OpenAI-only payload so the summary still goes through. You don't need to toggle this manually.
 </Callout>
 
 The API key can also be set via the `OPENAI_COMPAT_API_KEY` environment variable. The env var takes precedence over the stored value, so secrets don't have to live in `summarizer.json`.
@@ -62,10 +62,10 @@ Long traces and slow models can exceed the backend's default timeout. Override p
 | Codex | `TT_CODEX_TIMEOUT` | `300` (5 minutes) |
 | OpenAI-compatible | `TT_OPENAI_COMPAT_TIMEOUT` | `120` (2 minutes) |
 
-Set them before launching TokenTelemetry:
+Set them before launching AI Monitor Pro:
 
 ```bash
-TT_OLLAMA_TIMEOUT=600 tokentelemetry
+TT_OLLAMA_TIMEOUT=600 ai-monitor-pro
 ```
 
 Or export them in your shell profile.
@@ -76,7 +76,7 @@ After configuring a backend, use the **Test connection** button in Settings → 
 
 ## Where settings are stored
 
-Summarizer configuration is stored in `~/.tokentelemetry/summarizer.json`. You can edit it directly if needed — it's plain JSON. The file is created on first save.
+Summarizer configuration is stored in `~/.ai-monitor-pro/summarizer.json`. You can edit it directly if needed — it's plain JSON. The file is created on first save.
 
 ## Related
 

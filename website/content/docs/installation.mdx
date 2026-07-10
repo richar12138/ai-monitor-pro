@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install TokenTelemetry with a one-line curl command, a Windows PowerShell script, or by cloning the repo.
+description: Install AI Monitor Pro with a one-line curl command, a Windows PowerShell script, or by cloning the repo.
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -16,33 +16,33 @@ Before installing, make sure you have:
 
 ## Option 1: One-line installer (recommended)
 
-The installer clones TokenTelemetry into a `tokentelemetry/` folder in your current directory, sets up its Python and Node dependencies, and **launches it automatically** — your browser opens to the dashboard once it's ready.
+The installer clones AI Monitor Pro into a `ai-monitor-pro/` folder in your current directory, sets up its Python and Node dependencies, and **launches it automatically** — your browser opens to the dashboard once it's ready.
 
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://tokentelemetry.com/install.sh | bash
+curl -fsSL https://github.com/richar12138/ai-monitor-pro/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://tokentelemetry.com/install.ps1 | iex
+irm https://github.com/richar12138/ai-monitor-pro/install.ps1 | iex
 ```
 
 To start it again later, run the launcher **from inside the cloned folder**:
 
 ```bash
-cd tokentelemetry
+cd ai-monitor-pro
 ./start.sh          # macOS / Linux   (or: node bin/cli.js)
 ```
 
-<Callout title="There is no global `tokentelemetry` command">
-TokenTelemetry runs from its own folder and deliberately installs nothing globally — it never touches your PATH. Always launch it with `./start.sh` (or `node bin/cli.js`) from inside the `tokentelemetry/` directory; typing `tokentelemetry` on its own will give `command not found`.
+<Callout title="There is no global `ai-monitor-pro` command">
+AI Monitor Pro runs from its own folder and deliberately installs nothing globally — it never touches your PATH. Always launch it with `./start.sh` (or `node bin/cli.js`) from inside the `ai-monitor-pro/` directory; typing `ai-monitor-pro` on its own will give `command not found`.
 </Callout>
 
 <Callout title="The dashboard is local-only" type="info">
-TokenTelemetry binds to `127.0.0.1`, so the dashboard is reachable only from the same machine. To open it from another device (phone, another laptop, a VPS), set that up explicitly — see [Remote Access](/docs/configuration/remote-access).
+AI Monitor Pro binds to `127.0.0.1`, so the dashboard is reachable only from the same machine. To open it from another device (phone, another laptop, a VPS), set that up explicitly — see [Remote Access](/docs/configuration/remote-access).
 </Callout>
 
 <Callout title="Port already in use?" type="warn">
@@ -54,8 +54,8 @@ If you see `required port(s) already in use: 3000, 8000`, another process is on 
 Use this path if you want to hack on the source, pin to a specific commit, or inspect what you're running before executing it.
 
 ```bash
-git clone https://github.com/VasiHemanth/tokentelemetry.git
-cd tokentelemetry
+git clone https://github.com/richar12138/ai-monitor-pro.git
+cd ai-monitor-pro
 ./start.sh        # macOS / Linux
 ```
 
@@ -73,14 +73,14 @@ The launcher creates a Python virtual environment and installs dependencies on f
 
 ## What gets installed
 
-TokenTelemetry does **not** add any global npm package or modify your agent's config. It installs:
+AI Monitor Pro does **not** add any global npm package or modify your agent's config. It installs:
 
 - A clone of the repo (or the release archive)
 - A Python venv under `backend/venv/` (created on first launch)
 - A `node_modules/` folder under `frontend/` (created on first launch)
-- A data directory at `~/.tokentelemetry/` (created on first write)
+- A data directory at `~/.ai-monitor-pro/` (created on first write)
 
-Your agent logs are never modified — TokenTelemetry only reads them.
+Your agent logs are never modified — AI Monitor Pro only reads them.
 
 ## Updating
 
@@ -88,11 +88,11 @@ Re-run the one-liner to update to the latest version, or `git pull` inside the r
 
 ## Uninstalling
 
-Stop TokenTelemetry (Ctrl+C), then remove the cloned folder (wherever you ran the installer) and the data directory:
+Stop AI Monitor Pro (Ctrl+C), then remove the cloned folder (wherever you ran the installer) and the data directory:
 
 ```bash
 # from the directory where you installed it:
-rm -rf tokentelemetry ~/.tokentelemetry
+rm -rf ai-monitor-pro ~/.ai-monitor-pro
 ```
 
 That's everything — no system packages, no daemons, no registry entries.

@@ -1,9 +1,9 @@
-# tokentelemetry — one-line installer (Windows PowerShell).
-#   irm https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.ps1 | iex
+# ai-monitor-pro — one-line installer (Windows PowerShell).
+#   irm https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 
-$RepoUrl   = "https://github.com/VasiHemanth/tokentelemetry.git"
-$TargetDir = if ($env:TOKENTELEMETRY_DIR) { $env:TOKENTELEMETRY_DIR } else { "tokentelemetry" }
+$RepoUrl   = "https://github.com/richar12138/ai-monitor-pro.git"
+$TargetDir = if ($env:TOKENTELEMETRY_DIR) { $env:TOKENTELEMETRY_DIR } else { "ai-monitor-pro" }
 
 function Need($cmd) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {

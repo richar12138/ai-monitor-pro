@@ -23,7 +23,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <DocsLayout
         tree={source.pageTree}
         nav={{
-          title: "TokenTelemetry Docs",
+          title: "AI Monitor Pro Docs",
           url: "/docs",
         }}
         // Dark-only site: hide the light/dark toggle in the sidebar footer.

@@ -1,4 +1,4 @@
-/* TokenTelemetry plugin — minimal styling. SDK provides Tailwind + shadcn,
+/* AI Monitor Pro plugin — minimal styling. SDK provides Tailwind + shadcn,
    so we only need overrides for the iframe wrapper. */
 .tt-plugin-iframe {
   width: 100%;

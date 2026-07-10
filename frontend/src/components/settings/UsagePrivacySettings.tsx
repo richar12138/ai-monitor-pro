@@ -74,7 +74,7 @@ export default function UsagePrivacySettings() {
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <p className="text-[13px] leading-relaxed text-[var(--tt-fg-dim)] max-w-[560px]">
-              When on, TokenTelemetry sends <strong className="text-[var(--tt-fg-muted)]">anonymous,
+              When on, AI Monitor Pro sends <strong className="text-[var(--tt-fg-muted)]">anonymous,
               content-free</strong> stats about which pages and features you use, so we can focus on
               what matters. It <strong className="text-[var(--tt-fg-muted)]">never</strong> sends your
               code, prompts, file paths, project names, tokens, or costs.{" "}

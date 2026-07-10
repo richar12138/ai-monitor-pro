@@ -33,7 +33,7 @@ export default function TerminalReplay() {
         <span className="w-2.5 h-2.5 rounded-full bg-amber-400/50" />
         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/50" />
         <span className="ml-3 inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--tt-fg-dim)] truncate">
-          <Activity size={11} className="text-[var(--tt-brand)]" /> tokentelemetry · session-trace
+          <Activity size={11} className="text-[var(--tt-brand)]" /> ai-monitor-pro · session-trace
         </span>
       </div>
       <div className="p-5 sm:p-6 font-mono text-[12px] sm:text-[13px] leading-relaxed min-h-[320px] sm:min-h-[360px] space-y-1.5">

@@ -2,7 +2,7 @@
 """Dev/CI-only pricing sync — fetches models.dev and regenerates pricing_data.json.
 
 ⚠️  This script is the ONLY place in the project that performs outbound network
-I/O for pricing, and it is NEVER imported or run on a user machine. TokenTelemetry
+I/O for pricing, and it is NEVER imported or run on a user machine. AI Monitor Pro
 is local-first: users get fresh prices through the normal npm/git version update,
 not by phoning models.dev at runtime. See backend/pricing.py — it only reads the
 bundled, committed pricing_data.json (zero network I/O at import or runtime).
@@ -45,7 +45,7 @@ SCHEMA_VERSION = 1
 # Separator used to flatten (provider, model) tuples into JSON string keys.
 PROVIDER_SEP = "\x00"
 
-# Map models.dev provider ids → the lowercased provider names TokenTelemetry
+# Map models.dev provider ids → the lowercased provider names AI Monitor Pro
 # records in sessions.billing_provider (and keys PRICING_BY_PROVIDER on).
 PROVIDER_ALIASES = {
     "fireworks-ai": "fireworks",
@@ -92,7 +92,7 @@ def _extract_rates(cost: Dict[str, Any]) -> Optional[Dict[str, Optional[float]]]
 
 def fetch_dataset(url: str = MODELS_DEV_URL, timeout: int = 60) -> Dict[str, Any]:
     """Fetch the models.dev dataset. Raises a clear error if offline/bad data."""
-    req = urllib.request.Request(url, headers={"User-Agent": "tokentelemetry-pricing-sync"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ai-monitor-pro-pricing-sync"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()

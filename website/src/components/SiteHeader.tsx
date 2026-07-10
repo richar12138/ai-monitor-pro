@@ -5,7 +5,7 @@ import { Star, Activity, Menu, X } from "lucide-react";
 import { track } from "@/lib/track";
 import { useGithubStats } from "@/lib/useGithubStats";
 
-const GITHUB_URL = "https://github.com/VasiHemanth/tokentelemetry";
+const GITHUB_URL = "https://github.com/richar12138/ai-monitor-pro";
 
 export default function SiteHeader() {
   const { stars } = useGithubStats();

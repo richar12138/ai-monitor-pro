@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-13
-- **Deciders:** VasiHemanth
-- **Related:** [TokenTelemetry Roadmap board](https://github.com/users/VasiHemanth/projects/1)
+- **Deciders:** richar12138
+- **Related:** [AI Monitor Pro Roadmap board](https://github.com/users/richar12138/projects/1)
 
 ## Context
 
-TokenTelemetry is a solo-maintained, local-first project with a growing community
+AI Monitor Pro is a solo-maintained, local-first project with a growing community
 on GitHub Issues/Discussions. There is no Jira/Linear and a strong preference to
 stay on free, GitHub-native tooling. The recurring pain: months after a feature
 ships, it's hard to reconstruct *why* it was built a certain way, and therefore

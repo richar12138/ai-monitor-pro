@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Sync the canonical plugin source (plugin/hermes-dashboard/) into the
-# standalone publishing repo (tokentelemetry-hermes-plugin), bump the
+# standalone publishing repo (ai-monitor-pro-hermes-plugin), bump the
 # version, commit, tag, and push.
 #
 # Prerequisites:
 #   1. The standalone repo exists on GitHub. Create it once:
-#        gh repo create VasiHemanth/tokentelemetry-hermes-plugin \
+#        gh repo create richar12138/ai-monitor-pro-hermes-plugin \
 #          --public --license MIT \
-#          --description "TokenTelemetry launcher for Hermes Dashboard"
+#          --description "AI Monitor Pro launcher for Hermes Dashboard"
 #   2. You have push access to that repo.
 #
 # Usage:
@@ -19,7 +19,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_PLUGIN="$REPO_ROOT/plugin/hermes-dashboard"
 TEMPLATE="$REPO_ROOT/scripts/publish-plugin-template"
-PUBLISH_REPO="${PUBLISH_REPO:-git@github.com:VasiHemanth/tokentelemetry-hermes-plugin.git}"
+PUBLISH_REPO="${PUBLISH_REPO:-git@github.com:richar12138/ai-monitor-pro-hermes-plugin.git}"
 NEW_VERSION="${1:-}"
 
 if [[ ! -d "$SRC_PLUGIN" ]]; then
@@ -70,7 +70,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-COMMIT_MSG="release: sync from tokentelemetry@$UPSTREAM_SHA"
+COMMIT_MSG="release: sync from ai-monitor-pro@$UPSTREAM_SHA"
 [[ -n "$NEW_VERSION" ]] && COMMIT_MSG="$COMMIT_MSG (v$NEW_VERSION)"
 
 git commit -m "$COMMIT_MSG"
@@ -84,5 +84,5 @@ git push origin HEAD
 [[ -n "$NEW_VERSION" ]] && git push origin "v$NEW_VERSION"
 
 echo ""
-echo "✓ Published version $CURRENT_VERSION from tokentelemetry@$UPSTREAM_SHA"
-echo "  Install: hermes plugins install VasiHemanth/tokentelemetry-hermes-plugin"
+echo "✓ Published version $CURRENT_VERSION from ai-monitor-pro@$UPSTREAM_SHA"
+echo "  Install: hermes plugins install richar12138/ai-monitor-pro-hermes-plugin"

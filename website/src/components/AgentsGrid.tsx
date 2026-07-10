@@ -6,7 +6,7 @@ import { track } from "@/lib/track";
 /**
  * Interactive agent cards. The CRO audit (D3) found visitors tapping the old
  * static agent cards expecting them to *do* something — dead clicks. Now each
- * card is a real button that expands to reveal what TokenTelemetry captures and
+ * card is a real button that expands to reveal what AI Monitor Pro captures and
  * where it reads from, so the click pays off.
  */
 export default function AgentsGrid() {
@@ -21,7 +21,7 @@ export default function AgentsGrid() {
             Eleven agents, <span className="text-[var(--tt-brand)]">one place.</span>
           </h2>
           <p className="mt-3.5 text-[15.5px] text-[var(--tt-fg-muted)] leading-relaxed">
-            Tap any agent to see what TokenTelemetry captures and where it reads from.
+            Tap any agent to see what AI Monitor Pro captures and where it reads from.
           </p>
         </div>
 

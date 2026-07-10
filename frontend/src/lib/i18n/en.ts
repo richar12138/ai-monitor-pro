@@ -43,7 +43,7 @@ const en: I18nDict = {
   "activity.title": "Recent activity",
   "activity.autoSync": "auto-sync 15s",
   "activity.empty.title": "No agent data yet",
-  "activity.empty.desc": "TokenTelemetry watches local agent runtimes for activity. Run Claude Code, Cursor, Copilot, or another supported agent to populate this feed.",
+  "activity.empty.desc": "AI Monitor Pro watches local agent runtimes for activity. Run Claude Code, Cursor, Copilot, or another supported agent to populate this feed.",
   "activity.noMessage": "No message content",
   "activity.agent": "Agent",
   "activity.project": "Project",
@@ -212,7 +212,7 @@ const en: I18nDict = {
   // Settings
   "settings.configuration": "Configuration",
   "settings.title": "Settings",
-  "settings.desc": "Configure how TokenTelemetry summarizes your session traces.",
+  "settings.desc": "Configure how AI Monitor Pro summarizes your session traces.",
   "settings.aiSummaries": "AI trace summaries",
   "settings.aiSummariesDesc": "Pick a coding agent to generate narrative summaries, or disable AI summaries entirely.",
   "settings.summarizerBackend": "Summarizer backend",

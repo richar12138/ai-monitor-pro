@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Symlink the TokenTelemetry plugin into ~/.hermes/plugins/ so Hermes Dashboard
+# Symlink the AI Monitor Pro plugin into ~/.hermes/plugins/ so Hermes Dashboard
 # discovers it on next launch. Honors HERMES_HOME if set.
 set -euo pipefail
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/plugin/hermes-dashboard"
-DEST_DIR="$HERMES_HOME/plugins/tokentelemetry"
+DEST_DIR="$HERMES_HOME/plugins/ai-monitor-pro"
 DEST_LINK="$DEST_DIR/dashboard"
 
 if [[ ! -d "$SRC" ]]; then
@@ -36,4 +36,4 @@ echo ""
 echo "Next steps:"
 echo "  1. Start (or restart) the Hermes Dashboard:"
 echo "       hermes dashboard"
-echo "  2. Open http://127.0.0.1:9119 and click TokenTelemetry in the sidebar."
+echo "  2. Open http://127.0.0.1:9119 and click AI Monitor Pro in the sidebar."

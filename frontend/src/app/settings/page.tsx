@@ -142,7 +142,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Configuration"
         title="Settings"
-        description="Configure how TokenTelemetry summarizes your session traces."
+        description="Configure how AI Monitor Pro summarizes your session traces."
         icon={<Settings2 size={20} strokeWidth={2.25} />}
       />
 

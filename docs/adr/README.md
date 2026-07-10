@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This folder holds the **why** behind TokenTelemetry's architecture — one short file
+This folder holds the **why** behind AI Monitor Pro's architecture — one short file
 per significant decision, written *when the decision is made* and committed in the
 same PR as the code that implements it.
 
@@ -11,7 +11,7 @@ way, and what breaks if I change it?" without anyone reconstructing it from memo
 
 ## Where this fits
 
-- **Board** ([TokenTelemetry Roadmap](https://github.com/users/VasiHemanth/projects/1)) — the *index* of work. Each card's `ADR` field links here.
+- **Board** ([AI Monitor Pro Roadmap](https://github.com/users/richar12138/projects/1)) — the *index* of work. Each card's `ADR` field links here.
 - **ADRs** (this folder) — the *why*.
 - **Design docs** (`../design/`) — the *what & how* of a feature.
 - **PRs** — the *change itself* + validation (diff, tests, review).

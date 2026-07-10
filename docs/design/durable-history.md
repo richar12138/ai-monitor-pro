@@ -17,7 +17,7 @@ _scan_sessions_sync() ──► live session list ──► 30s RAM cache (uncha
                                   ▼
               history_store.upsert_sessions() + mark_absent()
                                   ▼
-                    ~/.tokentelemetry/history.db
+                    ~/.ai-monitor-pro/history.db
                   (sessions / transcripts / summaries)
 
 GET /analytics?from&to&granularity&agents&models&projects

@@ -1,10 +1,10 @@
 {
-  "name": "tokentelemetry",
+  "name": "ai-monitor-pro",
   "version": "1.0.0",
-  "description": "Local token + cost monitoring dashboard for Claude, Codex, Gemini, and other coding agents.",
+  "description": "AI Monitor Pro - 本地 AI Agent 可观测仪表盘，支持 Token 追踪、成本监控、Skill 分析。兼容 Claude Code、Codex、Cursor、Hermes 等主流 AI 编程助手。基于 TokenTelemetry 深度定制的中文版。",
   "main": "index.js",
   "bin": {
-    "tokentelemetry": "./bin/cli.js"
+    "ai-monitor-pro": "./bin/cli.js"
   },
   "scripts": {
     "start": "node bin/cli.js"
@@ -16,17 +16,22 @@
     "claude",
     "codex",
     "gemini",
-    "monitoring"
+    "monitoring",
+    "token",
+    "telemetry",
+    "cost-tracking",
+    "skill-analytics",
+    "中文"
   ],
-  "author": "Hemanth Vasi <hemanth.vasi1716@gmail.com>",
+  "author": "richar12138 <lichengqing@talkweb.com.cn>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/VasiHemanth/tokentelemetry.git"
+    "url": "https://github.com/richar12138/ai-monitor-pro"
   },
-  "homepage": "https://tokentelemetry.com",
+  "homepage": "https://github.com/richar12138/ai-monitor-pro",
   "bugs": {
-    "url": "https://github.com/VasiHemanth/tokentelemetry/issues"
+    "url": "https://github.com/richar12138/ai-monitor-pro/issues"
   },
   "dependencies": {},
   "engines": {

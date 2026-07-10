@@ -4,11 +4,11 @@ import { Copy, Check, Star, Lock, Monitor, TrendingUp } from "lucide-react";
 import { track } from "@/lib/track";
 import { useGithubStats } from "@/lib/useGithubStats";
 
-const GITHUB_URL = "https://github.com/VasiHemanth/tokentelemetry";
+const GITHUB_URL = "https://github.com/richar12138/ai-monitor-pro";
 
 const INSTALL: Record<"mac" | "win", string> = {
-  mac: "curl -fsSL https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.sh | bash",
-  win: "irm https://raw.githubusercontent.com/VasiHemanth/tokentelemetry/main/install.ps1 | iex",
+  mac: "curl -fsSL https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.sh | bash",
+  win: "irm https://raw.githubusercontent.com/richar12138/ai-monitor-pro/main/install.ps1 | iex",
 };
 
 export default function Hero() {
@@ -135,7 +135,7 @@ export default function Hero() {
               </div>
               <div className="aspect-[16/12] sm:aspect-[16/11] overflow-hidden bg-[var(--tt-sunken)]">
                 <img src="/screenshots/dashboard.png" width={3200} height={3000}
-                  alt="TokenTelemetry dashboard showing live token usage across detected agents"
+                  alt="AI Monitor Pro dashboard showing live token usage across detected agents"
                   className="block w-full h-auto object-cover object-top" loading="eager" decoding="async" />
               </div>
             </div>

@@ -28,13 +28,13 @@ export default function TrustStrip() {
 
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-[var(--tt-border)]">
           <div className="text-[11.5px] font-mono text-[var(--tt-fg-dim)]">
-            tokentelemetry · built by{" "}
+            ai-monitor-pro · built by{" "}
             <a
               href="https://www.linkedin.com/in/vasi-hemanth/"
               target="_blank" rel="noopener noreferrer"
               className="text-[var(--tt-fg-muted)] hover:text-[var(--tt-fg)] transition-colors"
             >
-              Hemanth Vasi
+              richar12138
             </a>
             <span className="mx-2 text-[var(--tt-fg-faint)]">·</span>
             <Link
@@ -45,13 +45,13 @@ export default function TrustStrip() {
             </Link>
           </div>
           <a
-            href="https://github.com/VasiHemanth/tokentelemetry"
+            href="https://github.com/richar12138/ai-monitor-pro"
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 h-9 px-3 rounded-[var(--tt-radius)] tt-tint-1 hover:tt-tint-2 border border-[var(--tt-border-strong)] text-[var(--tt-fg)] text-[12px] font-medium transition-colors"
           >
             <GitBranch size={14} />
             <img
-              src="https://img.shields.io/github/stars/VasiHemanth/tokentelemetry?style=flat&label=star&color=1f2937&labelColor=0a0c10"
+              src="https://img.shields.io/github/stars/richar12138/ai-monitor-pro?style=flat&label=star&color=1f2937&labelColor=0a0c10"
               alt="GitHub stars"
               className="h-4"
             />

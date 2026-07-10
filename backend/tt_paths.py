@@ -1,15 +1,15 @@
-"""Single source of truth for where TokenTelemetry stores its config + state.
+"""Single source of truth for where AI Monitor Pro stores its config + state.
 
-By default everything lives in ``~/.tokentelemetry/``. Two environment variables
+By default everything lives in ``~/.ai-monitor-pro/``. Two environment variables
 let a user relocate it — handy for keeping the system drive clear, isolating
 dev-tool state on a secondary drive, or pinning the path in tests:
 
   - ``TOKENTELEMETRY_DATA_DIR``  Absolute override of the data directory itself.
         Used verbatim: set it to ``D:\\dev\\tt-data`` (or ``/mnt/data/tt``) and
-        that exact folder becomes the store — no ``.tokentelemetry`` suffix is
+        that exact folder becomes the store — no ``.ai-monitor-pro`` suffix is
         appended. Highest precedence. This is the knob most users want.
   - ``TOKENTELEMETRY_HOME``      Override of the *home* directory; the usual
-        ``.tokentelemetry`` subfolder is still appended underneath it. This is a
+        ``.ai-monitor-pro`` subfolder is still appended underneath it. This is a
         pre-existing convention already honoured by the power/billing config and
         the test suite, kept for backward compatibility.
 
@@ -26,16 +26,16 @@ from pathlib import Path
 
 # The conventional folder name appended under the user's home (or under
 # TOKENTELEMETRY_HOME). Not appended when TOKENTELEMETRY_DATA_DIR is used.
-DEFAULT_DIRNAME = ".tokentelemetry"
+DEFAULT_DIRNAME = ".ai-monitor-pro"
 
 
 def data_dir() -> Path:
-    """Resolve the TokenTelemetry data directory.
+    """Resolve the AI Monitor Pro data directory.
 
     Precedence (first match wins):
       1. ``TOKENTELEMETRY_DATA_DIR`` — used verbatim (``~`` expanded).
-      2. ``TOKENTELEMETRY_HOME`` — ``<that>/.tokentelemetry``.
-      3. ``~/.tokentelemetry``.
+      2. ``TOKENTELEMETRY_HOME`` — ``<that>/.ai-monitor-pro``.
+      3. ``~/.ai-monitor-pro``.
     """
     explicit = os.environ.get("TOKENTELEMETRY_DATA_DIR")
     if explicit and explicit.strip():

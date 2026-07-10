@@ -101,13 +101,13 @@ def test_save_and_clear_override(home):
 
 
 def test_garbage_overrides_file_is_ignored(home):
-    p = home / ".tokentelemetry"; p.mkdir()
+    p = home / ".ai-monitor-pro"; p.mkdir()
     (p / "billing.json").write_text("not json {{{")
     assert bm.load_overrides() == {}
 
 
 def test_invalid_mode_in_file_is_filtered(home):
-    p = home / ".tokentelemetry"; p.mkdir()
+    p = home / ".ai-monitor-pro"; p.mkdir()
     (p / "billing.json").write_text(json.dumps({"claude": "bogus", "codex": "api"}))
     assert bm.load_overrides() == {"codex": "api"}
 

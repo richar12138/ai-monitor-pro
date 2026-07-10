@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 
-const REPO = "VasiHemanth/tokentelemetry";
+const REPO = "richar12138/ai-monitor-pro";
 const CACHE_KEY = "tt-gh-stats";
 
 // Fallback shown before the live fetch resolves (and if GitHub is unreachable /

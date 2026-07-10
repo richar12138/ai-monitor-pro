@@ -62,7 +62,7 @@ export default function HermesSpotlight() {
 
             <p className="text-[15px] sm:text-[17px] text-[var(--tt-fg-muted)] leading-relaxed mb-6 max-w-xl">
               Hermes runs across CLI, Telegram, Discord, Slack, Feishu, DingTalk, cron, webhook —
-              <strong className="text-[var(--tt-fg)]"> 38 source platforms in total</strong>. TokenTelemetry is the only tool that observes them as a single agent, with a dedicated dashboard that respects how Hermes actually works.
+              <strong className="text-[var(--tt-fg)]"> 38 source platforms in total</strong>. AI Monitor Pro is the only tool that observes them as a single agent, with a dedicated dashboard that respects how Hermes actually works.
             </p>
 
             <div className="flex flex-wrap gap-3">

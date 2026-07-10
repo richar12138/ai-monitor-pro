@@ -39,13 +39,13 @@ That's it — no secret to set. `wrangler.jsonc` already declares the binding:
 ```
 
 The dataset `tt_telemetry` is auto-created on first deploy. The app already
-points at `https://tt-telemetry-proxy.tokentelemetry.workers.dev`
+points at `https://tt-telemetry-proxy.ai-monitor-pro.workers.dev`
 (`DEFAULT_PROXY_URL` in `backend/telemetry.py`); override at runtime with
 `TT_TELEMETRY_URL=https://…`.
 
 **Verify the Worker is up:**
 ```bash
-curl -X POST https://tt-telemetry-proxy.tokentelemetry.workers.dev \
+curl -X POST https://tt-telemetry-proxy.ai-monitor-pro.workers.dev \
   -H 'content-type: application/json' \
   -d '{"eventName":"app.launched","sessionId":"test","systemProps":{},"props":{}}'
 # -> 204 (empty). A GET returns a plain-text health string.

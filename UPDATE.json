@@ -6,7 +6,7 @@
       "highlights": [
         {
           "title": "Per-project & per-agent spend budgets",
-          "description": "Set a monthly, weekly, or rolling-30-day limit (in dollars or tokens) on any project, and optionally per agent. It's observational — TokenTelemetry never blocks an agent — so it just tracks this period's spend against your limit: a colour-coded pill on the project header and a per-agent breakdown on the Insights tab."
+          "description": "Set a monthly, weekly, or rolling-30-day limit (in dollars or tokens) on any project, and optionally per agent. It's observational — AI Monitor Pro never blocks an agent — so it just tracks this period's spend against your limit: a colour-coded pill on the project header and a per-agent breakdown on the Insights tab."
         },
         {
           "title": "Alerts when you cross your thresholds",
@@ -31,7 +31,7 @@
       "highlights": [
         {
           "title": "Anonymous usage stats, explained plainly",
-          "description": "As TokenTelemetry evolves we need to understand how it's actually used — which features deliver value — so we can make it better for everyone. The app now shares a small set of anonymous usage signals: which pages and features you use, your OS and app version, and a coarse country derived at the network edge (never your IP). It carries nothing about your work — no code, prompts, file paths, project names, tokens, or costs. It's on by default so the picture is representative, but one click turns it off under Settings → Usage & privacy, and DO_NOT_TRACK=1 (or TT_NO_TELEMETRY=1) forces it off for restricted or enterprise environments.",
+          "description": "As AI Monitor Pro evolves we need to understand how it's actually used — which features deliver value — so we can make it better for everyone. The app now shares a small set of anonymous usage signals: which pages and features you use, your OS and app version, and a coarse country derived at the network edge (never your IP). It carries nothing about your work — no code, prompts, file paths, project names, tokens, or costs. It's on by default so the picture is representative, but one click turns it off under Settings → Usage & privacy, and DO_NOT_TRACK=1 (or TT_NO_TELEMETRY=1) forces it off for restricted or enterprise environments.",
           "href": "/settings#usage-privacy"
         }
       ]
@@ -47,7 +47,7 @@
         },
         {
           "title": "Your history no longer disappears when agents prune it",
-          "description": "Coding agents quietly delete their own session transcripts on a schedule (Claude Code after 30 days by default), which used to erase your older analytics with them. TokenTelemetry now keeps a tiny durable summary of every session it sees, so long-range trends survive. Under Settings you can see each agent's cleanup window, opt to keep full transcripts past it, and reclaim space anytime without losing your stats.",
+          "description": "Coding agents quietly delete their own session transcripts on a schedule (Claude Code after 30 days by default), which used to erase your older analytics with them. AI Monitor Pro now keeps a tiny durable summary of every session it sees, so long-range trends survive. Under Settings you can see each agent's cleanup window, opt to keep full transcripts past it, and reclaim space anytime without losing your stats.",
           "href": "/settings"
         }
       ]
@@ -93,7 +93,7 @@
         },
         {
           "title": "Recent Codex sessions were missing — now found",
-          "description": "Newer Codex versions stopped updating the session index TokenTelemetry relied on, so sessions from the last weeks never appeared. Sessions are now discovered from the session files themselves — expect your Codex session count (and totals) to jump to reality."
+          "description": "Newer Codex versions stopped updating the session index AI Monitor Pro relied on, so sessions from the last weeks never appeared. Sessions are now discovered from the session files themselves — expect your Codex session count (and totals) to jump to reality."
         }
       ]
     },
@@ -103,7 +103,7 @@
       "highlights": [
         {
           "title": "Opt-in remote / tailnet access",
-          "description": "Run TokenTelemetry on a headless box (a home server, a Tailscale tailnet) and open the dashboard from your laptop or phone. Start it with --host 0.0.0.0 and --allowed-origins <your-hosts>; the frontend now figures out where the backend is from the address you loaded it on, so the same setup works over localhost, a LAN IP, or a tailnet name. Default is unchanged: localhost-only.",
+          "description": "Run AI Monitor Pro on a headless box (a home server, a Tailscale tailnet) and open the dashboard from your laptop or phone. Start it with --host 0.0.0.0 and --allowed-origins <your-hosts>; the frontend now figures out where the backend is from the address you loaded it on, so the same setup works over localhost, a LAN IP, or a tailnet name. Default is unchanged: localhost-only.",
           "href": "/"
         },
         {
@@ -122,8 +122,8 @@
       "title": "Store your data wherever you want",
       "highlights": [
         {
-          "title": "Choose where TokenTelemetry keeps its data",
-          "description": "Config and state no longer have to live in ~/.tokentelemetry on your system drive. Launch with --data-dir /your/path (or set TOKENTELEMETRY_DATA_DIR) and everything — aliases, hidden projects, preferences, billing/power overrides, the summaries cache — moves together to that folder. Handy for keeping your main drive clear or putting app data on a secondary disk.",
+          "title": "Choose where AI Monitor Pro keeps its data",
+          "description": "Config and state no longer have to live in ~/.ai-monitor-pro on your system drive. Launch with --data-dir /your/path (or set TOKENTELEMETRY_DATA_DIR) and everything — aliases, hidden projects, preferences, billing/power overrides, the summaries cache — moves together to that folder. Handy for keeping your main drive clear or putting app data on a secondary disk.",
           "href": "/settings"
         }
       ]
@@ -139,17 +139,17 @@
         },
         {
           "title": "Energy consumption insights",
-          "description": "TokenTelemetry now estimates the energy consumed (in Watt-hours) for local generation based on your actual hardware's power configuration and model throughput.",
+          "description": "AI Monitor Pro now estimates the energy consumed (in Watt-hours) for local generation based on your actual hardware's power configuration and model throughput.",
           "href": "/"
         },
         {
           "title": "Savings vs. cloud estimates",
-          "description": "See how much you save by running locally: TokenTelemetry compares your local generation cost against a configurable reference cloud model (default Claude Sonnet) so you can track your API savings.",
+          "description": "See how much you save by running locally: AI Monitor Pro compares your local generation cost against a configurable reference cloud model (default Claude Sonnet) so you can track your API savings.",
           "href": "/"
         },
         {
           "title": "Carbon footprint estimate",
-          "description": "Set your grid's carbon intensity alongside your power rate, and TokenTelemetry tracks the CO₂ grams generated by your local AI sessions based on real hardware draw and session duration.",
+          "description": "Set your grid's carbon intensity alongside your power rate, and AI Monitor Pro tracks the CO₂ grams generated by your local AI sessions based on real hardware draw and session duration.",
           "href": "/settings"
         }
       ]
@@ -181,7 +181,7 @@
         },
         {
           "title": "Local models priced by electricity, not fake API rates",
-          "description": "Models you run yourself (Ollama, llama.cpp, vLLM) have no API bill — their real cost is power. Set your machine's watts under load and your kWh rate, and TokenTelemetry estimates the electricity cost instead of inventing a per-token charge."
+          "description": "Models you run yourself (Ollama, llama.cpp, vLLM) have no API bill — their real cost is power. Set your machine's watts under load and your kWh rate, and AI Monitor Pro estimates the electricity cost instead of inventing a per-token charge."
         },
         {
           "title": "Flat subscriptions now show $0 per call",
@@ -194,7 +194,7 @@
         },
         {
           "title": "Per-agent billing mode — bill vs. estimate, framed right",
-          "description": "If you pay per token (API key) for an agent, the cost figure approximates your real bill; on a flat subscription it's only an API-list-price equivalent. TokenTelemetry now auto-detects which one you're on per agent (from each agent's own auth — e.g. ~/.codex/auth.json) and frames the number accordingly, with a Settings → Billing & cost control to override any agent.",
+          "description": "If you pay per token (API key) for an agent, the cost figure approximates your real bill; on a flat subscription it's only an API-list-price equivalent. AI Monitor Pro now auto-detects which one you're on per agent (from each agent's own auth — e.g. ~/.codex/auth.json) and frames the number accordingly, with a Settings → Billing & cost control to override any agent.",
           "href": "/settings"
         }
       ]
@@ -205,7 +205,7 @@
       "highlights": [
         {
           "title": "Check-for-updates toggle",
-          "description": "TokenTelemetry's one outbound call — an optional check that tells you when new features ship — now has a switch in Settings → Updates & privacy. It sends no usage data; turn it off any time, or set TT_NO_UPDATE_CHECK=1 to enforce it off.",
+          "description": "AI Monitor Pro's one outbound call — an optional check that tells you when new features ship — now has a switch in Settings → Updates & privacy. It sends no usage data; turn it off any time, or set TT_NO_UPDATE_CHECK=1 to enforce it off.",
           "href": "/settings"
         },
         {
@@ -236,7 +236,7 @@
       "highlights": [
         {
           "title": "OpenAI-compatible summarizer backend",
-          "description": "Point TokenTelemetry at any server speaking the OpenAI /v1/chat/completions API — llama.cpp, vLLM, LM Studio, LocalAI, or Ollama's OpenAI endpoint — to generate trace summaries. No extra CLI to install: set the endpoint, model, and (optionally) an API key, tune sampling, and hit Test connection.",
+          "description": "Point AI Monitor Pro at any server speaking the OpenAI /v1/chat/completions API — llama.cpp, vLLM, LM Studio, LocalAI, or Ollama's OpenAI endpoint — to generate trace summaries. No extra CLI to install: set the endpoint, model, and (optionally) an API key, tune sampling, and hit Test connection.",
           "href": "/settings"
         }
       ]
@@ -268,7 +268,7 @@
       "highlights": [
         {
           "title": "GitHub Copilot CLI sessions tracked",
-          "description": "TokenTelemetry now reads GitHub Copilot CLI / agent sessions from ~/.copilot/session-state, so your terminal Copilot usage shows up alongside everything else — model, tokens, project, and full trace.",
+          "description": "AI Monitor Pro now reads GitHub Copilot CLI / agent sessions from ~/.copilot/session-state, so your terminal Copilot usage shows up alongside everything else — model, tokens, project, and full trace.",
           "href": "/"
         },
         {
@@ -284,12 +284,12 @@
       "highlights": [
         {
           "title": "Grok Build (xAI) support",
-          "description": "TokenTelemetry now tracks xAI's Grok Build coding agent — sessions, context usage, tool calls, permission decisions, and plan mode — with a dedicated forensics card. That's 11 agents tracked in total.",
+          "description": "AI Monitor Pro now tracks xAI's Grok Build coding agent — sessions, context usage, tool calls, permission decisions, and plan mode — with a dedicated forensics card. That's 11 agents tracked in total.",
           "href": "/"
         },
         {
           "title": "GitHub Copilot tracking restored",
-          "description": "Recent VS Code versions changed how Copilot chats are stored on disk, which made new sessions read as zero. TokenTelemetry now reads the new format, so your recent Copilot sessions show up again.",
+          "description": "Recent VS Code versions changed how Copilot chats are stored on disk, which made new sessions read as zero. AI Monitor Pro now reads the new format, so your recent Copilot sessions show up again.",
           "href": "/"
         },
         {
@@ -325,5 +325,5 @@
       ]
     }
   ],
-  "release_url": "https://github.com/VasiHemanth/tokentelemetry/commits/main"
+  "release_url": "https://github.com/richar12138/ai-monitor-pro/commits/main"
 }

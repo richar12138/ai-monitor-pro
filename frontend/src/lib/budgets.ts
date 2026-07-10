@@ -4,7 +4,7 @@ import { api } from "./api";
 
 // ---- Budget contract (see backend harness_config + /budgets endpoints) ----
 //
-// A budget is OBSERVATIONAL: TokenTelemetry reads logs after the fact and
+// A budget is OBSERVATIONAL: AI Monitor Pro reads logs after the fact and
 // cannot cap a running agent. A budget only powers threshold alerts (and,
 // later, burn-rate forecasts).
 //
