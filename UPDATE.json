@@ -6,7 +6,7 @@
       "highlights": [
         {
           "title": "Full session history — not just the last 100",
-          "description": "Claude Code and Codex used to stop tracking real usage once you passed 100 sessions; anything older sat frozen as a blank, zero-token row. Every session is now fully scanned, with a local cache keeping repeat scans fast, so your full history — and its true token/cost totals — stays accurate no matter how many sessions you've run.",
+          "description": "Claude Code and Codex used to stop tracking real usage once you passed 100 sessions; anything older sat frozen as a blank, zero-token row. Every session is now fully scanned, with a local cache keeping repeat scans fast, so your full history — and its true token/cost totals — stays accurate no matter how many sessions you've run. Thanks to mariadb-KyleHutchinson for reporting and fixing this (PR #131).",
           "href": "/sessions"
         },
         {
