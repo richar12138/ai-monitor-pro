@@ -2,7 +2,7 @@
 # AI Monitor Pro - 上游同步脚本
 # 用法: ./sync-upstream.sh
 #
-# 功能: 从原项目 AI Monitor Pro (VasiHemanth) 拉取最新代码，
+# 功能: 从原项目 TokenTelemetry (VasiHemanth) 拉取最新代码，
 #       自动替换所有品牌名为 AI Monitor Pro，解决冲突。
 
 set -e
@@ -16,7 +16,7 @@ echo "============================================"
 echo ""
 
 # 1. 拉取上游最新代码
-echo "[1/4] 拉取上游 AI Monitor Pro 最新代码..."
+echo "[1/4] 拉取上游 TokenTelemetry 最新代码..."
 git fetch upstream
 
 # 2. 创建临时分支进行同步
@@ -25,7 +25,7 @@ git checkout -b "$SYNC_BRANCH" main
 
 # 3. 合并上游代码（-X ours 优先保留我们的品牌修改）
 echo "[2/4] 合并上游 main..."
-if git merge upstream/main -m "sync: merge upstream AI Monitor Pro" 2>/dev/null; then
+if git merge upstream/main -m "sync: merge upstream TokenTelemetry"; then
     echo "  ✓ 合并成功，无冲突"
 else
     echo "  ⚠ 有冲突，自动解决中..."
@@ -48,17 +48,22 @@ find . -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.js" -o -name "*.py" 
     -o -name "*.ps1" -o -name "*.cff" -o -name "*.txt" \) \
     -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/dist/*" \
     -not -path "*/.next/*" \
-    -exec sed -i 's/AI Monitor Pro/AI Monitor Pro/g' {} + 2>/dev/null || true
+    -not -name "CODEX_SYNC_TASK.md" -not -name "SYNC_GUIDE.md" -not -name "sync-upstream.sh" \
+    -exec sed -i 's/TokenTelemetry/AI Monitor Pro/g' {} + 2>/dev/null || true
 
 find . -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.js" -o -name "*.py" \
     -o -name "*.json" -o -name "*.md" -o -name "*.mdx" \) \
     -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/dist/*" \
+    -not -name "CODEX_SYNC_TASK.md" -not -name "SYNC_GUIDE.md" -not -name "sync-upstream.sh" \
     -exec sed -i 's/tokentelemetry/ai-monitor-pro/g' {} + 2>/dev/null || true
 
 find . -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.js" -o -name "*.py" \
     -o -name "*.json" -o -name "*.md" -o -name "*.mdx" \) \
     -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/dist/*" \
+    -not -name "CODEX_SYNC_TASK.md" -not -name "SYNC_GUIDE.md" -not -name "sync-upstream.sh" \
     -exec sed -i 's/VasiHemanth/richar12138/g' {} + 2>/dev/null || true
+
+sed -i 's/基于 AI Monitor Pro 深度定制/基于 TokenTelemetry 深度定制/g' package.json 2>/dev/null || true
 
 git add -A
 git commit -m "sync: rebrand after upstream merge" 2>/dev/null || echo "  (no brand changes needed)"

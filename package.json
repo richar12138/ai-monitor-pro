@@ -1,7 +1,7 @@
 {
   "name": "ai-monitor-pro",
   "version": "1.0.0",
-  "description": "AI Monitor Pro - 本地 AI Agent 可观测仪表盘，支持 Token 追踪、成本监控、Skill 分析。兼容 Claude Code、Codex、Cursor、Hermes 等主流 AI 编程助手。基于 AI Monitor Pro 深度定制的中文版。",
+  "description": "AI Monitor Pro - 本地 AI Agent 可观测仪表盘，支持 Token 追踪、成本监控、Skill 分析。兼容 Claude Code、Codex、Cursor、Hermes 等主流 AI 编程助手。基于 TokenTelemetry 深度定制的中文版。",
   "main": "index.js",
   "bin": {
     "ai-monitor-pro": "./bin/cli.js"
