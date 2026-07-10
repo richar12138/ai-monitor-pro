@@ -20,12 +20,21 @@ raised.
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from tt_paths import data_dir
 
 logger = logging.getLogger("tokentelemetry.scan_cache")
+
+# Bump whenever the shape or meaning of cached payloads changes: new/renamed
+# payload fields, a parsing fix that alters computed values, or a pricing
+# update that affects cached costs. `_mtime` only detects source-transcript
+# changes; this detects code changes. A mismatch is a miss, so stale entries
+# are transparently reparsed and rewritten — never migrated in place.
+CACHE_VERSION = 1
 
 
 def _require_safe_component(candidate: str) -> str:
@@ -55,7 +64,8 @@ def cache_path(agent: str, session_id: str) -> Path:
 
 
 def read_cache(agent: str, session_id: str, source_mtime: float) -> Optional[Dict[str, Any]]:
-    """Return the cached payload if fresh (stored _mtime >= source_mtime), else None.
+    """Return the cached payload if fresh (stored _mtime >= source_mtime AND
+    written by this CACHE_VERSION), else None.
 
     Never raises — any OSError/JSONDecodeError/missing-key/unsafe-id is
     treated as a cache miss.
@@ -65,6 +75,8 @@ def read_cache(agent: str, session_id: str, source_mtime: float) -> Optional[Dic
         path = cache_path(agent, session_id)
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
+        if data.get("_version") != CACHE_VERSION:
+            return None
         cached_mtime = data["_mtime"]
         if cached_mtime >= source_mtime:
             return data
@@ -91,12 +103,21 @@ def write_cache(agent: str, session_id: str, source_mtime: float, payload: Dict[
     """
     to_write = dict(payload)
     to_write["_mtime"] = source_mtime
+    to_write["_version"] = CACHE_VERSION
     path = None
+    tmp_name = None
     try:
         path = cache_path(agent, session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as f:
+        # Write-to-temp + atomic rename so a crash or concurrent scan can
+        # never leave a torn file at the final path (a torn file is only a
+        # miss, but a whole-file swap means readers see old-or-new, never
+        # garbage).
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(to_write, f)
+        os.replace(tmp_name, path)
+        tmp_name = None
     except (OSError, TypeError, ValueError) as exc:
         logger.debug(
             "scan_cache write failed for agent=%s session_id=%s path=%s: %s",
@@ -105,3 +126,8 @@ def write_cache(agent: str, session_id: str, source_mtime: float, payload: Dict[
             path,
             exc,
         )
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass

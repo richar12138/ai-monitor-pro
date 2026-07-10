@@ -1094,5 +1094,88 @@ def test_codex_scan_cache_hit_reapplies_alias(scan_env, monkeypatch):
     assert "_raw_cwd" not in sess2
 
 
+def test_scan_cache_version_mismatch_is_miss(tmp_path, monkeypatch):
+    """An entry written by a different CACHE_VERSION must read as a miss even
+    when its _mtime is fresh — parser/pricing changes ship as a version bump,
+    and old entries must be reparsed, not served."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    scan_cache.write_cache("claude", "sid1", source_mtime=1000.0, payload={"model": "x"})
+    assert scan_cache.read_cache("claude", "sid1", source_mtime=1000.0) is not None
+
+    path = scan_cache.cache_path("claude", "sid1")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["_version"] = scan_cache.CACHE_VERSION - 1
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    assert scan_cache.read_cache("claude", "sid1", source_mtime=1000.0) is None
+
+
+def test_scan_cache_version_bump_invalidates_old_entries(tmp_path, monkeypatch):
+    """Simulate an app upgrade: entries written before a CACHE_VERSION bump
+    are all misses afterwards, and a rewrite under the new version hits."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    scan_cache.write_cache("codex", "sid2", source_mtime=1000.0, payload={"model": "old"})
+    monkeypatch.setattr(scan_cache, "CACHE_VERSION", scan_cache.CACHE_VERSION + 1)
+
+    assert scan_cache.read_cache("codex", "sid2", source_mtime=1000.0) is None
+    scan_cache.write_cache("codex", "sid2", source_mtime=1000.0, payload={"model": "new"})
+    hit = scan_cache.read_cache("codex", "sid2", source_mtime=1000.0)
+    assert hit is not None and hit["model"] == "new"
+
+
+def test_scan_cache_missing_version_field_is_miss(tmp_path, monkeypatch):
+    """Entries written before the version field existed (or hand-mangled)
+    must be misses, not treated as current."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(tmp_path / "tt_data"))
+
+    path = scan_cache.cache_path("claude", "sid3")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"model": "x", "_mtime": 1000.0}), encoding="utf-8")
+
+    assert scan_cache.read_cache("claude", "sid3", source_mtime=1000.0) is None
+
+
+def test_claude_cache_refreshes_when_subagent_finishes_late(scan_env, monkeypatch):
+    """Delegation usage lives in separate subagent transcript files, so a
+    subagent that finishes AFTER the parent's last write (background agent)
+    must still invalidate the cache — freshness keys on the max mtime across
+    parent + subagent files, not the parent alone."""
+    monkeypatch.setenv("TOKENTELEMETRY_DATA_DIR", str(scan_env / "tt_data"))
+    session_file = make_claude_tree(scan_env / ".claude")
+
+    first = main._scan_sessions_sync()
+    first_sess = next(s for s in first if s["agent"] == "claude" and s["id"] == SID)
+    first_delegated = first_sess["delegation"]["delegated_total"]
+    assert first_delegated > 0
+
+    parent_mtime = session_file.stat().st_mtime
+    sub_file = session_file.parent / SID / "subagents" / "agent-two.jsonl"
+    with open(sub_file, "a", encoding="utf-8") as f:
+        f.write(_assistant_line(model="claude-sonnet-4-6", inp=500, out=250,
+                                attribution="general-purpose"))
+    # Parent untouched: only the subagent transcript moved forward.
+    os.utime(session_file, (parent_mtime, parent_mtime))
+
+    second = main._scan_sessions_sync()
+    second_sess = next(s for s in second if s["agent"] == "claude" and s["id"] == SID)
+    assert second_sess["delegation"]["delegated_total"] > first_delegated
+
+
+def test_sessions_endpoint_strips_stub_flag(scan_env, monkeypatch):
+    """`stub` is scan→persist plumbing; it must not appear in the /sessions
+    API response."""
+    import asyncio
+    make_claude_tree(scan_env / ".claude")
+    # Keep the fire-and-forget history persist away from the real store.
+    monkeypatch.setattr(main, "_persist_history_async", lambda data: None)
+
+    data = asyncio.run(main.get_sessions(fresh=True))
+
+    assert data, "expected at least one session from the fixture tree"
+    assert all("stub" not in s for s in data)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

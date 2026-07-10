@@ -3016,6 +3016,18 @@ def _scan_sessions_sync():
                 source_mtime = None
                 try:
                     source_mtime = session_file.stat().st_mtime
+                    # Delegation usage comes from separate subagent transcript
+                    # files (see _claude_subagent_usage), so freshness must key
+                    # on them too: a background subagent can finish AFTER the
+                    # parent's last write, and keying on the parent alone would
+                    # serve its stale (undercounted) delegation totals forever.
+                    sub_dir = session_file.parent / sid / "subagents"
+                    if sub_dir.is_dir():
+                        for sub_f in sub_dir.glob("agent-*.jsonl"):
+                            try:
+                                source_mtime = max(source_mtime, sub_f.stat().st_mtime)
+                            except OSError:
+                                continue
                     cached = scan_cache.read_cache("claude", sid, source_mtime)
                 except OSError:
                     cached = None
@@ -4335,7 +4347,12 @@ async def get_sessions_cached(fresh: bool = False) -> List[Dict[str, Any]]:
 @app.get("/sessions")
 async def get_sessions(fresh: bool = False):
     """Return the session list. Pass ?fresh=1 to force a re-scan."""
-    return await get_sessions_cached(fresh=fresh)
+    data = await get_sessions_cached(fresh=fresh)
+    # `stub` is scan→persist plumbing (history_store.upsert_sessions keys its
+    # conflict clause on it), not API surface. Strip it on shallow copies —
+    # never mutate the cached dicts, which the async history persist may
+    # still be reading.
+    return [{k: v for k, v in s.items() if k != "stub"} for s in data]
 
 
 @app.get("/pricing")
