@@ -1,6 +1,22 @@
 {
   "releases": [
     {
+      "tag": "2026-07-12",
+      "title": "Pi Coding Agent support",
+      "highlights": [
+        {
+          "title": "Pi sessions now show up automatically",
+          "description": "If you use the Pi Coding Agent, its sessions are now detected and tracked alongside Claude Code, Codex, Cursor and the rest — grouped by project, with the full prompt/response trace, tools used, and model. Nothing to configure; TokenTelemetry reads Pi's local session history. Thanks to Tharun-tharun for requesting this (issue #135).",
+          "href": "/sessions"
+        },
+        {
+          "title": "Accurate per-turn cost, including local models",
+          "description": "Pi records real token usage on every turn, so cost is computed per message using that turn's own model — mixed-model sessions add up correctly. When Pi runs against Ollama or another local endpoint, those turns are priced by electricity instead of API rates.",
+          "href": "/analytics"
+        }
+      ]
+    },
+    {
       "tag": "2026-07-09",
       "title": "Every session tracked, correctly dated",
       "highlights": [
