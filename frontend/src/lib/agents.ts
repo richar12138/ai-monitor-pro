@@ -1,6 +1,6 @@
 import {
   Terminal, Database, Sparkles, Orbit, Cpu, Zap, MousePointer2,
-  GitBranch, Code2, Server, Bot, Boxes, type LucideIcon,
+  GitBranch, Code2, Server, Bot, Boxes, Pi, type LucideIcon,
 } from "lucide-react";
 import HermesIcon from "@/components/icons/HermesIcon";
 import GrokIcon from "@/components/icons/GrokIcon";
@@ -8,7 +8,7 @@ import GrokIcon from "@/components/icons/GrokIcon";
 export type AgentKey =
   | "claude" | "codex" | "gemini" | "antigravity"
   | "qwen" | "vibe" | "cursor" | "copilot" | "opencode" | "hermes" | "grok"
-  | "openai_compat" | "cline" | "smallcode";
+  | "openai_compat" | "cline" | "smallcode" | "pi";
 
 export interface AgentMeta {
   key: AgentKey;
@@ -33,6 +33,7 @@ export const AGENTS: Record<AgentKey, AgentMeta> = {
   openai_compat: { key: "openai_compat", label: "OpenAI-compatible server", hex: "#14b8a6", icon: Server },
   cline:       { key: "cline",       label: "Cline",       hex: "#7c3aed", icon: Bot },
   smallcode:   { key: "smallcode",   label: "SmallCode",   hex: "#0d9488", icon: Boxes },
+  pi:          { key: "pi",          label: "Pi",          hex: "#e11d48", icon: Pi },
 };
 
 const FALLBACK: AgentMeta = {
