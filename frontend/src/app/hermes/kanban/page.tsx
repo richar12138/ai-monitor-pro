@@ -70,7 +70,7 @@ export default function HermesKanbanPage() {
         icon={<div className="h-10 w-10 grid place-items-center rounded-[var(--tt-radius)] bg-rose-500/10 border border-rose-500/30"><Kanban className="text-rose-500" size={20} /></div>}
         eyebrow="Hermes Agent"
         title="Kanban"
-        description="Swarm task boards with per-task cost — Hermes tracks the tasks, TokenTelemetry prices them via each task's linked session."
+        description="Swarm task boards with per-task cost — Hermes tracks the tasks, AI Monitor Pro prices them via each task's linked session."
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

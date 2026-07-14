@@ -7,7 +7,7 @@ Each file opens with a {"type":"session", id, cwd, timestamp} header, then a
 stream of message events. Assistant turns carry `message.provider`,
 `message.model` and a per-request `message.usage` block with input/output/
 cacheRead/cacheWrite/reasoning and a nested cost — verified against a real Pi
-0.80.3 session on disk. The scanner recomputes cost with TokenTelemetry's own
+0.80.3 session on disk. The scanner recomputes cost with AI Monitor Pro's own
 pricing (per message, so mixed-model sessions bill correctly).
 
 Run: pytest backend/test_pi_scan.py -q

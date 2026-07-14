@@ -18,7 +18,7 @@ AI Monitor Pro 是一个**本地 AI Agent 可观测仪表盘**，读取 Claude C
 
 **100% 本地运行，数据不上传。** 免费开源，MIT 协议。
 
-**来源**：从上游 `VasiHemanth/tokentelemetry` 定制而来，做了完整的品牌替换和中英文国际化。
+**来源**：从上游 `richar12138/ai-monitor-pro` 定制而来，做了完整的品牌替换和中英文国际化。
 
 ## 二、品牌与仓库
 
@@ -27,12 +27,12 @@ AI Monitor Pro 是一个**本地 AI Agent 可观测仪表盘**，读取 Claude C
 | 项目名 | AI Monitor Pro |
 | 包名 | ai-monitor-pro |
 | GitHub | https://github.com/richar12138/ai-monitor-pro |
-| 上游来源 | https://github.com/VasiHemanth/tokentelemetry |
+| 上游来源 | https://github.com/richar12138/ai-monitor-pro |
 | license | MIT |
 
 **规则**：
 - 代码中品牌始终用 `AI Monitor Pro` / `ai-monitor-pro` / `richar12138`
-- 真实上游信息（TokenTelemetry / VasiHemanth）只在同步文档、致谢、来源说明中保留
+- 真实上游信息（AI Monitor Pro / richar12138）只在同步文档、致谢、来源说明中保留
 - package.json 的 author、repository、homepage 必须保留我们的版本
 - README.md 保留中文头部和我们的品牌
 
@@ -152,7 +152,7 @@ ai-monitor-pro/
 
 ```
 origin   https://github.com/richar12138/ai-monitor-pro.git
-upstream https://github.com/VasiHemanth/tokentelemetry.git
+upstream https://github.com/richar12138/ai-monitor-pro.git
 ```
 
 ### 每周同步流程
@@ -183,9 +183,9 @@ git merge upstream/main
 ### 品牌替换（merge 后必须执行）
 
 搜索所有 `.tsx .ts .js .py .json .md .yaml .yml .html .css .sh .ps1` 文件，排除 `node_modules dist .git .next`：
-- `TokenTelemetry` → `AI Monitor Pro`
-- `tokentelemetry` → `ai-monitor-pro`
-- `VasiHemanth` → `richar12138`
+- `AI Monitor Pro` → `AI Monitor Pro`
+- `ai-monitor-pro` → `ai-monitor-pro`
+- `richar12138` → `richar12138`
 
 **不要替换的文件**：`CODEX_SYNC_TASK.md`、`SYNC_GUIDE.md`、`sync-upstream.sh`（里面描述真实上游的部分）。
 
