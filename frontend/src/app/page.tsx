@@ -119,12 +119,14 @@ export default function Home() {
           <StatTile
             label={t("kpi.sessions")}
             value={loading ? <Skeleton className="h-8 w-20" /> : sessions.length.toLocaleString()}
+            hint="All time"
             icon={<Clock size={16} />}
             accent="var(--tt-brand)"
           />
           <StatTile
             label={t("kpi.tokens")}
             value={loading ? <Skeleton className="h-8 w-20" /> : formatTokens(totalTokens)}
+            hint="All time"
             icon={<TrendingUp size={16} />}
             accent="var(--tt-success)"
           />
@@ -137,7 +139,7 @@ export default function Home() {
           <StatTile
             label={t("kpi.apiCost")}
             value={loading ? <Skeleton className="h-8 w-20" /> : formatCost(totalCost)}
-            hint={framing.hint}
+            hint={framing.hint ? `${framing.hint} · all time` : "All time"}
             icon={<DollarSign size={16} />}
             accent="var(--tt-warn)"
           />

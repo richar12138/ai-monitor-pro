@@ -11,11 +11,11 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
-frontend/package-lock.json
-package-lock.json
 
 # --- Python / backend ---
 backend/venv/
+# also match a symlinked venv (the dir pattern above doesn't)
+backend/venv
 __pycache__/
 *.pyc
 *.pyo
