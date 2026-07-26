@@ -1,6 +1,6 @@
 {
-  "name": "Token Telemetry",
-  "short_name": "TokenTelemetry",
+  "name": "AI Monitor Pro",
+  "short_name": "AI Monitor Pro",
   "description": "Local, read-only observability for AI coding agents.",
   "start_url": "/",
   "display": "standalone",

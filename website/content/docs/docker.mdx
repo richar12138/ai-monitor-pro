@@ -135,7 +135,7 @@ make up-prod                          # pull the latest images and start detache
 TT_IMAGE_TAG=sha-abc1234 make up-prod # pin a specific build instead of latest
 ```
 
-This pulls `ghcr.io/vasihemanth/ai-monitor-pro-backend` and `ghcr.io/vasihemanth/ai-monitor-pro-frontend`. On a fork, set `GHCR_OWNER` to your own namespace. `TT_IMAGE_TAG` selects the tag (default `latest`).
+This pulls `ghcr.io/richar12138/ai-monitor-pro-backend` and `ghcr.io/richar12138/ai-monitor-pro-frontend`. On a fork, set `GHCR_OWNER` to your own namespace. `TT_IMAGE_TAG` selects the tag (default `latest`).
 
 <Callout title="Don't override TT_API_PORT with up-prod" type="warn">
 The published frontend image has `NEXT_PUBLIC_API_PORT` baked in at 18000, so the backend host port is fixed for `make up-prod`. You can still move the frontend host port with `PORT=`, but overriding `TT_API_PORT` will point the browser at a port the backend isn't published on.

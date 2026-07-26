@@ -21,14 +21,14 @@ endef
 
 
 define print-urls
-@printf '\n\033[1mTokenTelemetry running\033[0m\n'
+@printf '\n\033[1mAI Monitor Pro running\033[0m\n'
 @printf '  frontend  \033[2m→\033[0m  \033[36mhttp://localhost:%s\033[0m\n' "$${PORT:-13000}"
 @printf '  backend   \033[2m→\033[0m  \033[36mhttp://localhost:%s\033[0m\n' "$${TT_API_PORT:-18000}"
 @printf '\n'
 endef
 
 help: ## Show this help
-	@printf '\033[1;37mTokenTelemetry\033[0m \033[2m· container tooling\033[0m\n'
+	@printf '\033[1;37mAI Monitor Pro\033[0m \033[2m· container tooling\033[0m\n'
 	@printf '\033[2mtool  →\033[0m \033[36m$(COMPOSE)\033[0m\n'
 	@awk 'BEGIN{FS=":.*##"} \
 		/^##@/{printf "\n\033[1;33m%s\033[0m\n",substr($$0,5)} \
