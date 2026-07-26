@@ -90,7 +90,7 @@ def test_subscription_model_returns_zero():
     of endpoint (issue #176: model-level flat subscription)."""
     prev = os.environ.get("TOKENTELEMETRY_HOME")
     with tempfile.TemporaryDirectory() as home:
-        d = Path(home) / ".tokentelemetry"
+        d = Path(home) / ".ai-monitor-pro"
         d.mkdir(parents=True, exist_ok=True)
         (d / "power.json").write_text(
             json.dumps({"subscriptionModels": ["some-model"]}), encoding="utf-8"

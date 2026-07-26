@@ -1,6 +1,6 @@
 """Tests for OpenCode data-dir resolution (discussion #170).
 
-Before this, TokenTelemetry only ever looked at ``~/.local/share/opencode/
+Before this, AI Monitor Pro only ever looked at ``~/.local/share/opencode/
 opencode.db``, so a relocated or non-Linux OpenCode install was silently
 invisible. These tests pin the candidate-probing behaviour: env override,
 ``$XDG_DATA_HOME``, per-OS defaults, priority, and the fall-back-to-canonical

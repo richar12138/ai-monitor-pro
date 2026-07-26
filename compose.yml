@@ -1,4 +1,4 @@
-# TokenTelemetry — Container Compose (Docker or Podman)
+# AI Monitor Pro — Container Compose (Docker or Podman)
 #
 # Prefer the Makefile targets which auto-select the right tool:
 #   make up          # build + start (foreground)

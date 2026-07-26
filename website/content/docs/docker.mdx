@@ -1,11 +1,11 @@
 ---
 title: Docker & Podman
-description: Run TokenTelemetry in a container with Docker or Podman using the bundled Makefile and Compose files.
+description: Run AI Monitor Pro in a container with Docker or Podman using the bundled Makefile and Compose files.
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Instead of the native launcher, you can run TokenTelemetry in containers. The repo ships a `Makefile` and Compose files that work with either **Docker** or **Podman** — `make` auto-detects which one you have, preferring `podman compose` when both are present.
+Instead of the native launcher, you can run AI Monitor Pro in containers. The repo ships a `Makefile` and Compose files that work with either **Docker** or **Podman** — `make` auto-detects which one you have, preferring `podman compose` when both are present.
 
 This path suits you if you'd rather not install Python and Node on the host, or you already run other services in containers. It reads your agent logs from the host as read-only mounts and keeps its own state on a named volume, so nothing on your machine is modified.
 
@@ -22,8 +22,8 @@ The container path relies on `${HOME}` being set, which it is not in plain `cmd.
 ## Quick start
 
 ```bash
-git clone https://github.com/VasiHemanth/tokentelemetry.git
-cd tokentelemetry
+git clone https://github.com/richar12138/ai-monitor-pro.git
+cd ai-monitor-pro
 TZ=Asia/Kolkata PORT=13000 TT_API_PORT=18000 make up
 ```
 
@@ -76,7 +76,7 @@ volumes:
 
 After editing the mounts, restart with `make down && make up` (no rebuild is needed — mounts are a runtime concern).
 
-The `:ro` flag keeps each mount read-only, so TokenTelemetry can never modify your agent logs. The trailing `:z` relabels the mount for SELinux-enforcing hosts (Fedora, RHEL, CentOS); it is harmless on macOS and other Linux distros.
+The `:ro` flag keeps each mount read-only, so AI Monitor Pro can never modify your agent logs. The trailing `:z` relabels the mount for SELinux-enforcing hosts (Fedora, RHEL, CentOS); it is harmless on macOS and other Linux distros.
 
 ### Mount paths on Windows
 
@@ -119,7 +119,7 @@ Or export it once in your shell profile so every `make up` inherits it.
 
 ## Persistence
 
-TokenTelemetry's own state — `history.db`, cached summaries, budgets, settings — lives on a named Docker/Podman volume called `tt_data`, mounted at `/tt-data` inside the container (via `TOKENTELEMETRY_DATA_DIR` and `TOKENTELEMETRY_HOME`).
+AI Monitor Pro's own state — `history.db`, cached summaries, budgets, settings — lives on a named Docker/Podman volume called `tt_data`, mounted at `/tt-data` inside the container (via `TOKENTELEMETRY_DATA_DIR` and `TOKENTELEMETRY_HOME`).
 
 - `make down` stops the containers but **keeps** `tt_data`. Your history survives across restarts and rebuilds.
 - `make clean` removes the containers, the local images, **and** `tt_data`. This deletes your stored history and settings — use it only when you want a clean slate.
@@ -135,7 +135,7 @@ make up-prod                          # pull the latest images and start detache
 TT_IMAGE_TAG=sha-abc1234 make up-prod # pin a specific build instead of latest
 ```
 
-This pulls `ghcr.io/vasihemanth/tokentelemetry-backend` and `ghcr.io/vasihemanth/tokentelemetry-frontend`. On a fork, set `GHCR_OWNER` to your own namespace. `TT_IMAGE_TAG` selects the tag (default `latest`).
+This pulls `ghcr.io/vasihemanth/ai-monitor-pro-backend` and `ghcr.io/vasihemanth/ai-monitor-pro-frontend`. On a fork, set `GHCR_OWNER` to your own namespace. `TT_IMAGE_TAG` selects the tag (default `latest`).
 
 <Callout title="Don't override TT_API_PORT with up-prod" type="warn">
 The published frontend image has `NEXT_PUBLIC_API_PORT` baked in at 18000, so the backend host port is fixed for `make up-prod`. You can still move the frontend host port with `PORT=`, but overriding `TT_API_PORT` will point the browser at a port the backend isn't published on.

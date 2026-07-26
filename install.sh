@@ -30,6 +30,6 @@ if [ ! -f "./bin/cli.js" ]; then
   cd "$TARGET_DIR"
 fi
 
-echo "✓ TokenTelemetry ready in $(pwd)"
+echo "✓ AI Monitor Pro ready in $(pwd)"
 echo "  Start it again any time with:  cd \"$(pwd)\" && ./start.sh"
 exec node bin/cli.js
